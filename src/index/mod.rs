@@ -11,6 +11,7 @@ pub(crate) mod api;
 pub(crate) struct Index {
     diff: crates_index_diff::Index,
     path: PathBuf,
+    repository_url: String,
     config: IndexConfig,
 }
 
@@ -40,11 +41,19 @@ fn load_config(repo: &git2::Repository) -> Result<IndexConfig> {
 }
 
 impl Index {
-    pub(crate) fn new(path: impl AsRef<Path>) -> Result<Self> {
+    pub(crate) fn new(path: impl AsRef<Path>, repository_url: impl Into<String>) -> Result<Self> {
         let path = path.as_ref().to_owned();
-        let diff = crates_index_diff::Index::from_path_or_cloned(&path)?;
+        let repository_url = repository_url.into();
+        let mut options = crates_index_diff::CloneOptions::default();
+        options.repository_url = repository_url.clone();
+        let diff = crates_index_diff::Index::from_path_or_cloned_with_options(&path, options)?;
         let config = load_config(diff.repository())?;
-        Ok(Self { diff, config, path })
+        Ok(Self {
+            diff,
+            config,
+            path,
+            repository_url,
+        })
     }
 
     pub(crate) fn diff(&self) -> &crates_index_diff::Index {
@@ -63,6 +72,7 @@ impl Index {
 
 impl Clone for Index {
     fn clone(&self) -> Self {
-        Self::new(&self.path).expect("we already loaded this registry successfully once")
+        Self::new(&self.path, &self.repository_url)
+            .expect("we already loaded this registry successfully once")
     }
 }

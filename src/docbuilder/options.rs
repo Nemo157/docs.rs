@@ -2,11 +2,14 @@ use crate::error::Result;
 use std::path::PathBuf;
 use std::{env, fmt};
 
+static DEFAULT_INDEX_REPOSITORY_URL: &str = "https://github.com/rust-lang/crates.io-index";
+
 #[derive(Clone)]
 pub struct DocBuilderOptions {
     pub keep_build_directory: bool,
     pub prefix: PathBuf,
     pub registry_index_path: PathBuf,
+    pub registry_index_repository_url: String,
     pub skip_if_exists: bool,
     pub skip_if_log_exists: bool,
     pub skip_oldest_versions: bool,
@@ -24,6 +27,7 @@ impl Default for DocBuilderOptions {
             prefix,
             registry_index_path,
 
+            registry_index_repository_url: String::from(DEFAULT_INDEX_REPOSITORY_URL),
             keep_build_directory: false,
             skip_if_exists: false,
             skip_if_log_exists: false,

@@ -30,7 +30,11 @@ pub struct DocBuilder {
 
 impl DocBuilder {
     pub fn new(options: DocBuilderOptions) -> DocBuilder {
-        let index = Index::new(&options.registry_index_path).expect("valid index");
+        let index = Index::new(
+            &options.registry_index_path,
+            &options.registry_index_repository_url,
+        )
+        .expect("valid index");
         DocBuilder {
             options,
             index,

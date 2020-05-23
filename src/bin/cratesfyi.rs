@@ -197,6 +197,13 @@ struct Build {
     )]
     registry_index_path: Option<PathBuf>,
 
+    /// Sets the registry index repository url, where the registry index will be cloned from
+    #[structopt(
+        name = "REGISTRY_INDEX_REPOSITORY_URL",
+        long = "registry-index-repository-url"
+    )]
+    registry_index_repository_url: Option<String>,
+
     /// Skips building documentation if documentation exists
     #[structopt(name = "SKIP_IF_EXISTS", short = "s", long = "skip")]
     skip_if_exists: bool,
@@ -224,6 +231,10 @@ impl Build {
 
             if let Some(registry_index_path) = self.registry_index_path {
                 doc_options.registry_index_path = registry_index_path;
+            }
+
+            if let Some(registry_index_repository_url) = self.registry_index_repository_url {
+                doc_options.registry_index_repository_url = registry_index_repository_url;
             }
 
             doc_options.skip_if_exists = self.skip_if_exists;
