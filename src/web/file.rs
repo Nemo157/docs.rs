@@ -27,9 +27,10 @@ impl File {
             .headers
             .set(ContentType(self.0.mime.parse().unwrap()));
         response.headers.set(CacheControl(cache));
-        response
-            .headers
-            .set(LastModified(HttpDate(time::at(self.0.date_updated))));
+        // FIXME: This is so horrible
+        response.headers.set(LastModified(HttpDate(
+            time::strptime(&self.0.date_updated.format("%+").to_string(), "%+").unwrap(),
+        )));
         response
     }
 

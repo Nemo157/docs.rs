@@ -1,14 +1,12 @@
-use std::io::Read;
-
 use crate::{error::Result, utils::MetadataPackage};
-
+use chrono::{DateTime, Utc};
 use failure::err_msg;
 use reqwest::{header::ACCEPT, Client};
 use serde_json::Value;
-use time::Timespec;
+use std::io::Read;
 
 pub(crate) struct RegistryCrateData {
-    pub(crate) release_time: Timespec,
+    pub(crate) release_time: DateTime<Utc>,
     pub(crate) yanked: bool,
     pub(crate) downloads: i32,
     pub(crate) owners: Vec<CrateOwner>,
@@ -36,7 +34,7 @@ impl RegistryCrateData {
 }
 
 /// Get release_time, yanked and downloads from the registry's API
-fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(time::Timespec, bool, i32)> {
+fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(DateTime<Utc>, bool, i32)> {
     let url = format!("https://crates.io/api/v1/crates/{}/versions", pkg.name);
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
@@ -70,10 +68,11 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(time::Tim
                 .get("created_at")
                 .and_then(|c| c.as_str())
                 .ok_or_else(|| err_msg("Not a JSON object"))?;
+
             release_time = Some(
-                time::strptime(release_time_raw, "%Y-%m-%dT%H:%M:%S")
+                DateTime::parse_from_str(release_time_raw, "%Y-%m-%dT%H:%M:%S%.f%:z")
                     .unwrap()
-                    .to_timespec(),
+                    .with_timezone(&Utc),
             );
 
             yanked = Some(
@@ -95,7 +94,7 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(time::Tim
     }
 
     Ok((
-        release_time.unwrap_or_else(time::get_time),
+        release_time.unwrap_or_else(|| Utc::now()),
         yanked.unwrap_or(false),
         downloads.unwrap_or(0),
     ))

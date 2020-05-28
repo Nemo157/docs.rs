@@ -566,6 +566,7 @@ impl Handler for SharedResourceHandler {
 mod test {
     use super::*;
     use crate::test::*;
+    use chrono::Utc;
     use reqwest::StatusCode;
     use serde_json::json;
     use std::{collections::BTreeMap, iter::FromIterator};
@@ -1372,7 +1373,8 @@ mod test {
 
     #[test]
     fn serialize_rustdoc_page() {
-        let time = time::get_time();
+        let time = Utc::now();
+
         let details = json!({
             "name": "rcc",
             "version": "100.0.0",

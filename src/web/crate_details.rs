@@ -4,6 +4,7 @@ use super::pool::Pool;
 use super::{
     duration_to_str, match_version, redirect_base, render_markdown, MatchSemver, MetaData,
 };
+use chrono::{DateTime, NaiveDateTime, Utc};
 use iron::prelude::*;
 use iron::{status, Url};
 use postgres::Connection;
@@ -27,7 +28,7 @@ pub struct CrateDetails {
     dependencies: Option<Value>,
     readme: Option<String>,
     rustdoc: Option<String>, // this is description_long in database
-    release_time: time::Timespec,
+    release_time: DateTime<Utc>,
     build_status: bool,
     last_successful_build: Option<String>,
     rustdoc_status: bool,
@@ -215,7 +216,7 @@ impl CrateDetails {
             dependencies: rows.get(0).get(6),
             readme: rows.get(0).get(7),
             rustdoc: rows.get(0).get(8),
-            release_time: rows.get(0).get(9),
+            release_time: DateTime::from_utc(rows.get(0).get::<_, NaiveDateTime>(9), Utc),
             build_status: rows.get(0).get(10),
             last_successful_build: None,
             rustdoc_status: rows.get(0).get(11),
@@ -296,7 +297,7 @@ impl CrateDetails {
     }
 
     #[cfg(test)]
-    pub fn default_tester(release_time: time::Timespec) -> Self {
+    pub fn default_tester(release_time: DateTime<Utc>) -> Self {
         Self {
             name: "rcc".to_string(),
             version: "100.0.0".to_string(),
@@ -394,6 +395,7 @@ pub fn crate_details_handler(req: &mut Request) -> IronResult<Response> {
 mod tests {
     use super::*;
     use crate::test::TestDatabase;
+    use chrono::Utc;
     use failure::Error;
     use serde_json::json;
 
@@ -643,7 +645,7 @@ mod tests {
 
     #[test]
     fn serialize_crate_details() {
-        let time = time::get_time();
+        let time = Utc::now();
         let mut details = CrateDetails::default_tester(time);
 
         let mut correct_json = json!({
