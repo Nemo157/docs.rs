@@ -29,7 +29,7 @@ impl File {
         response.headers.set(CacheControl(cache));
         // FIXME: This is so horrible
         response.headers.set(LastModified(HttpDate(
-            time::strptime(&self.0.date_updated.format("%+").to_string(), "%+").unwrap(),
+            time::strptime(&self.0.date_updated.format("%+").to_string(), "%Y-%m-%dT%T").unwrap(),
         )));
         response
     }
