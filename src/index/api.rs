@@ -94,7 +94,7 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(DateTime<
     }
 
     Ok((
-        release_time.unwrap_or_else(|| Utc::now()),
+        release_time.unwrap_or_else(Utc::now),
         yanked.unwrap_or(false),
         downloads.unwrap_or(0),
     ))
