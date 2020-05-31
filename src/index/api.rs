@@ -2,6 +2,7 @@ use crate::{error::Result, utils::MetadataPackage};
 use chrono::{DateTime, Utc};
 use failure::err_msg;
 use reqwest::{header::ACCEPT, Client};
+use semver::Version;
 use serde_json::Value;
 use std::io::Read;
 
@@ -39,13 +40,12 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(DateTime<
     // FIXME: There is probably better way to do this
     //        and so many unwraps...
     let client = Client::new();
-    let mut res = client
-        .get(&url[..])
-        .header(ACCEPT, "application/json")
-        .send()?;
+    let mut res = client.get(&url).header(ACCEPT, "application/json").send()?;
+
     let mut body = String::new();
-    res.read_to_string(&mut body).unwrap();
-    let json: Value = serde_json::from_str(&body[..])?;
+    res.read_to_string(&mut body)?;
+
+    let json: Value = serde_json::from_str(&body)?;
     let versions = json
         .as_object()
         .and_then(|o| o.get("versions"))
@@ -63,15 +63,14 @@ fn get_release_time_yanked_downloads(pkg: &MetadataPackage) -> Result<(DateTime<
             .and_then(|v| v.as_str())
             .ok_or_else(|| err_msg("Not a JSON object"))?;
 
-        if semver::Version::parse(version_num).unwrap().to_string() == pkg.version {
+        if Version::parse(version_num)?.to_string() == pkg.version {
             let release_time_raw = version
                 .get("created_at")
                 .and_then(|c| c.as_str())
                 .ok_or_else(|| err_msg("Not a JSON object"))?;
 
             release_time = Some(
-                DateTime::parse_from_str(release_time_raw, "%Y-%m-%dT%H:%M:%S%.f%:z")
-                    .unwrap()
+                DateTime::parse_from_str(release_time_raw, "%Y-%m-%dT%H:%M:%S%.f%:z")?
                     .with_timezone(&Utc),
             );
 
