@@ -1,4 +1,5 @@
-use failure::{bail, format_err, Error, Fail, ResultExt};
+use anyhow::{anyhow, Context};
+use std::error::Error;
 use std::env::VarError;
 use std::str::FromStr;
 
@@ -15,7 +16,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_env() -> Result<Self, Error> {
+    pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             database_url: require_env("CRATESFYI_DATABASE_URL")?,
             max_pool_size: env("DOCSRS_MAX_POOL_SIZE", 90)?,
@@ -27,33 +28,33 @@ impl Config {
     }
 }
 
-fn env<T>(var: &str, default: T) -> Result<T, Error>
+fn env<T>(var: &str, default: T) -> anyhow::Result<T>
 where
     T: FromStr,
-    T::Err: Fail,
+    T::Err: Error + Send + Sync + 'static,
 {
     Ok(maybe_env(var)?.unwrap_or(default))
 }
 
-fn require_env<T>(var: &str) -> Result<T, Error>
+fn require_env<T>(var: &str) -> anyhow::Result<T>
 where
     T: FromStr,
-    T::Err: Fail,
+    T::Err: Error + Send + Sync + 'static,
 {
-    maybe_env(var)?.ok_or_else(|| format_err!("configuration variable {} is missing", var))
+    maybe_env(var)?.with_context(|| anyhow!("configuration variable {} is missing", var))
 }
 
-fn maybe_env<T>(var: &str) -> Result<Option<T>, Error>
+fn maybe_env<T>(var: &str) -> anyhow::Result<Option<T>>
 where
     T: FromStr,
-    T::Err: Fail,
+    T::Err: Error + Send + Sync + 'static,
 {
     match std::env::var(var) {
         Ok(content) => Ok(content
             .parse::<T>()
             .map(Some)
-            .with_context(|_| format!("failed to parse configuration variable {}", var))?),
+            .with_context(|| format!("failed to parse configuration variable {}", var))?),
         Err(VarError::NotPresent) => Ok(None),
-        Err(VarError::NotUnicode(_)) => bail!("configuration variable {} is not UTF-8", var),
+        Err(VarError::NotUnicode(_)) => Err(anyhow!("configuration variable {} is not UTF-8", var)),
     }
 }

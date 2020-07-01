@@ -387,7 +387,7 @@ mod tests {
     use super::*;
     use crate::test::TestDatabase;
     use chrono::Utc;
-    use failure::Error;
+    use anyhow::Error;
     use serde_json::json;
 
     fn assert_last_successful_build_equals(
@@ -397,7 +397,7 @@ mod tests {
         expected_last_successful_build: Option<&str>,
     ) -> Result<(), Error> {
         let details = CrateDetails::new(&db.conn(), package, version)
-            .ok_or_else(|| failure::err_msg("could not fetch crate details"))?;
+            .ok_or_else(|| anyhow::anyhow!("could not fetch crate details"))?;
 
         assert_eq!(
             details.last_successful_build,

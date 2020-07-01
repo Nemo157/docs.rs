@@ -4,7 +4,7 @@ use url::Url;
 
 use self::api::Api;
 use crate::error::Result;
-use failure::ResultExt;
+use anyhow::Context;
 
 pub(crate) mod api;
 
@@ -33,7 +33,7 @@ fn load_config(repo: &git2::Repository) -> Result<IndexConfig> {
         .tree()?;
     let file = tree
         .get_name("config.json")
-        .ok_or_else(|| failure::format_err!("registry index missing config"))?;
+        .ok_or_else(|| anyhow::format_err!("registry index missing config"))?;
     let config = serde_json::from_slice(repo.find_blob(file.id())?.content())?;
     Ok(config)
 }

@@ -4,7 +4,7 @@ pub(crate) mod s3;
 pub(crate) use self::database::DatabaseBackend;
 pub(crate) use self::s3::S3Backend;
 use chrono::{DateTime, Utc};
-use failure::{err_msg, Error};
+use anyhow::{ensure, Error};
 use postgres::{transaction::Transaction, Connection};
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
@@ -95,9 +95,9 @@ pub fn get_file_list<P: AsRef<Path>>(path: P) -> Result<Vec<PathBuf>, Error> {
     let path = path.as_ref();
     let mut files = Vec::new();
 
-    if !path.exists() {
-        return Err(err_msg("File not found"));
-    } else if path.is_file() {
+    ensure!(path.exists(), "File not found");
+
+    if path.is_file() {
         files.push(PathBuf::from(path.file_name().unwrap()));
     } else if path.is_dir() {
         get_file_list_from_dir(path, &mut files)?;

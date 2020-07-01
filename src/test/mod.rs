@@ -4,7 +4,7 @@ use crate::db::{Pool, PoolConnection};
 use crate::storage::s3::TestS3;
 use crate::web::Server;
 use crate::Config;
-use failure::Error;
+use anyhow::Error;
 use log::error;
 use once_cell::unsync::OnceCell;
 use postgres::Connection;
@@ -27,13 +27,7 @@ pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
     };
 
     if let Err(err) = result {
-        eprintln!("the test failed: {}", err);
-        for cause in err.iter_causes() {
-            eprintln!("  caused by: {}", cause);
-        }
-
-        eprintln!("{}", err.backtrace());
-
+        eprintln!("the test failed: {:?}", err);
         panic!("the test failed");
     }
 }

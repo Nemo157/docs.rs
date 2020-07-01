@@ -1,10 +1,9 @@
 use super::Blob;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use failure::{Error, Fail};
 use postgres::{transaction::Transaction, Connection};
 
-#[derive(Debug, Fail)]
-#[fail(display = "the path is not present in the database")]
+#[derive(Debug, thiserror::Error)]
+#[error("the path is not present in the database")]
 struct PathNotFoundError;
 
 pub(crate) struct DatabaseBackend<'a> {
@@ -16,7 +15,7 @@ impl<'a> DatabaseBackend<'a> {
         Self { conn }
     }
 
-    pub(super) fn get(&self, path: &str, max_size: usize) -> Result<Blob, Error> {
+    pub(super) fn get(&self, path: &str, max_size: usize) -> anyhow::Result<Blob> {
         use std::convert::TryInto;
 
         // The maximum size for a BYTEA (the type used for `content`) is 1GB, so this cast is safe:
@@ -62,7 +61,7 @@ impl<'a> DatabaseBackend<'a> {
         }
     }
 
-    pub(super) fn store_batch(&self, batch: &[Blob], trans: &Transaction) -> Result<(), Error> {
+    pub(super) fn store_batch(&self, batch: &[Blob], trans: &Transaction) -> anyhow::Result<()> {
         for blob in batch {
             let compression = blob.compression.map(|alg| alg as i32);
             trans.query(

@@ -1,13 +1,12 @@
-use crate::error::Result;
-use failure::err_msg;
+use anyhow::Context;
 use regex::Regex;
 
 /// Parses rustc commit hash from rustc version string
-pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> Result<String> {
+pub fn parse_rustc_version<S: AsRef<str>>(version: S) -> anyhow::Result<String> {
     let version_regex = Regex::new(r" ([\w.-]+) \((\w+) (\d+)-(\d+)-(\d+)\)")?;
     let captures = version_regex
         .captures(version.as_ref())
-        .ok_or_else(|| err_msg("Failed to parse rustc version"))?;
+        .context("Failed to parse rustc version")?;
 
     Ok(format!(
         "{}{}{}-{}-{}",

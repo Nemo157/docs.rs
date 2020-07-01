@@ -121,11 +121,10 @@ impl DocBuilder {
                     crate::web::metrics::FAILED_BUILDS.inc();
                 }
                 error!(
-                    "Failed to build package {}-{} from queue: {}\nBacktrace: {}",
+                    "Failed to build package {}-{} from queue: {:?}",
                     name,
                     version,
                     e,
-                    e.backtrace()
                 )
             }
         }

@@ -427,7 +427,7 @@ pub fn releases_by_stars_handler(req: &mut Request) -> IronResult<Response> {
     )
 }
 
-pub fn releases_recent_failures_handler(req: &mut Request) -> IronResult<Response> {
+pub fn releases_recent_anyhows_handler(req: &mut Request) -> IronResult<Response> {
     let page_number: i64 = extension!(req, Router)
         .find("page")
         .unwrap_or("1")
@@ -443,13 +443,13 @@ pub fn releases_recent_failures_handler(req: &mut Request) -> IronResult<Respons
     releases_handler(
         packages,
         page_number,
-        "recent-failures",
-        "releases_navigation_recent_failures_tab",
+        "recent-anyhows",
+        "releases_navigation_recent_anyhows_tab",
         "Recent crates failed to build",
     )
 }
 
-pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Response> {
+pub fn releases_anyhows_by_stars_handler(req: &mut Request) -> IronResult<Response> {
     let page_number: i64 = extension!(req, Router)
         .find("page")
         .unwrap_or("1")
@@ -465,8 +465,8 @@ pub fn releases_failures_by_stars_handler(req: &mut Request) -> IronResult<Respo
     releases_handler(
         packages,
         page_number,
-        "failures",
-        "releases_navigation_failures_by_stars_tab",
+        "anyhows",
+        "releases_navigation_anyhows_by_stars_tab",
         "Crates with most stars failed to build",
     )
 }

@@ -1,6 +1,6 @@
 use crate::error::Result;
 use chrono::{DateTime, Utc};
-use failure::err_msg;
+use anyhow::{ensure, Context};
 use log::debug;
 use postgres::Connection;
 use regex::Regex;
@@ -38,7 +38,7 @@ pub fn github_updater(conn: &Connection) -> Result<()> {
         let repository_url: String = row.get(2);
 
         if let Err(err) = get_github_path(&repository_url[..])
-            .ok_or_else(|| err_msg("Failed to get github path"))
+            .context("Failed to get github path")
             .and_then(|path| get_github_fields(&path[..]))
             .and_then(|fields| {
                 conn.execute(
@@ -96,9 +96,7 @@ fn get_github_fields(path: &str) -> Result<GitHubFields> {
             )
             .send()?;
 
-        if resp.status() != StatusCode::OK {
-            return Err(err_msg("Failed to get github data"));
-        }
+        ensure!(resp.status() == StatusCode::OK, "Failed to get github data");
 
         resp.read_to_string(&mut body)?;
         body

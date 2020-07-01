@@ -2,7 +2,7 @@ use crate::db::Pool;
 use crate::error::Result;
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
-use failure::ResultExt;
+use anyhow::Context;
 use notify::{watcher, RecursiveMode, Watcher};
 use postgres::Connection;
 use serde_json::Value;
@@ -76,7 +76,7 @@ fn load_rustc_resource_suffix(conn: &Connection) -> Result<String> {
         &[],
     )?;
     if res.is_empty() {
-        failure::bail!("missing rustc version");
+        anyhow::bail!("missing rustc version");
     }
 
     if let Some(Ok(vers)) = res.get(0).get_opt::<_, Value>("value") {
@@ -85,7 +85,7 @@ fn load_rustc_resource_suffix(conn: &Connection) -> Result<String> {
         }
     }
 
-    failure::bail!("failed to parse the rustc version");
+    anyhow::bail!("failed to parse the rustc version");
 }
 
 pub(super) fn load_templates(conn: &Connection) -> Result<Tera> {
@@ -151,9 +151,9 @@ fn find_templates_in_filesystem(base: &str) -> Result<Vec<(PathBuf, Option<Strin
         // Strip the root directory from the path and use it as the template name.
         let name = path
             .strip_prefix(&root)
-            .with_context(|_| format!("{} is not a child of {}", path.display(), root.display()))?
+            .with_context(|| format!("{} is not a child of {}", path.display(), root.display()))?
             .to_str()
-            .ok_or_else(|| failure::format_err!("path {} is not UTF-8", path.display()))?
+            .with_context(|| anyhow::format_err!("path {} is not UTF-8", path.display()))?
             .to_string();
 
         files.push((path.to_path_buf(), Some(name)));

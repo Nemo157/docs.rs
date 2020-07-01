@@ -3,7 +3,7 @@ use crate::docbuilder::BuildResult;
 use crate::index::api::RegistryCrateData;
 use crate::utils::{Dependency, MetadataPackage, Target};
 use chrono::{DateTime, Utc};
-use failure::Error;
+use anyhow::Error;
 
 #[must_use = "FakeRelease does nothing until you call .create()"]
 pub(crate) struct FakeRelease<'a> {

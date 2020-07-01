@@ -5,7 +5,7 @@ use std::sync::Arc;
 use cratesfyi::db::{self, add_path_into_database, Pool};
 use cratesfyi::utils::{add_crate_to_queue, remove_crate_priority, set_crate_priority};
 use cratesfyi::{Config, DocBuilder, DocBuilderOptions, RustwideBuilder, Server};
-use failure::Error;
+use anyhow::Error;
 use postgres::Connection;
 use structopt::StructOpt;
 

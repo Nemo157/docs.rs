@@ -65,7 +65,7 @@ impl DocBuilderOptions {
 
     pub fn check_paths(&self) -> Result<()> {
         if !self.registry_index_path.exists() {
-            failure::bail!(
+            anyhow::bail!(
                 "registry index path '{}' does not exist",
                 self.registry_index_path.display()
             );

@@ -354,10 +354,10 @@ mod tests {
                 ("/releases/recent/1", "/releases/recent/:page"),
                 ("/releases/feed", "static resource"),
                 ("/releases/queue", "/releases/queue"),
-                ("/releases/recent-failures", "/releases/recent-failures"),
+                ("/releases/recent-anyhows", "/releases/recent-failures"),
                 (
-                    "/releases/recent-failures/1",
-                    "/releases/recent-failures/:page",
+                    "/releases/recent-anyhows/1",
+                    "/releases/recent-anyhows/:page",
                 ),
             ];
 

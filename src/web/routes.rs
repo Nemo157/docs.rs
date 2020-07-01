@@ -44,20 +44,20 @@ pub(super) fn build_routes() -> Routes {
         super::releases::releases_by_stars_handler,
     );
     routes.internal_page(
-        "/releases/recent-failures",
-        super::releases::releases_recent_failures_handler,
+        "/releases/recent-anyhows",
+        super::releases::releases_recent_anyhows_handler,
     );
     routes.internal_page(
-        "/releases/recent-failures/:page",
-        super::releases::releases_recent_failures_handler,
+        "/releases/recent-anyhows/:page",
+        super::releases::releases_recent_anyhows_handler,
     );
     routes.internal_page(
-        "/releases/failures",
-        super::releases::releases_failures_by_stars_handler,
+        "/releases/anyhows",
+        super::releases::releases_anyhows_by_stars_handler,
     );
     routes.internal_page(
-        "/releases/failures/:page",
-        super::releases::releases_failures_by_stars_handler,
+        "/releases/anyhows/:page",
+        super::releases::releases_anyhows_by_stars_handler,
     );
 
     routes.internal_page("/crate/:name", super::crate_details::crate_details_handler);

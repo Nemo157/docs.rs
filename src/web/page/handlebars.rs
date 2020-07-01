@@ -15,7 +15,7 @@ lazy_static::lazy_static! {
         .unwrap_or_else(|_| "???".into());
 }
 
-fn load_rustc_resource_suffix() -> Result<String, failure::Error> {
+fn load_rustc_resource_suffix() -> Result<String, anyhow::Error> {
     // New instances of the configuration or the connection pool shouldn't be created inside the
     // application, but we're removing handlebars so this is not going to be a problem in the long
     // term. To avoid wasting resources, the pool is hardcoded to only keep one connection alive.
@@ -30,7 +30,7 @@ fn load_rustc_resource_suffix() -> Result<String, failure::Error> {
         &[],
     )?;
     if res.is_empty() {
-        failure::bail!("missing rustc version");
+        anyhow::bail!("missing rustc version");
     }
 
     if let Some(Ok(vers)) = res.get(0).get_opt::<_, Value>("value") {
@@ -39,7 +39,7 @@ fn load_rustc_resource_suffix() -> Result<String, failure::Error> {
         }
     }
 
-    failure::bail!("failed to parse the rustc version");
+    anyhow::bail!("failed to parse the rustc version");
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

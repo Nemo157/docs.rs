@@ -610,7 +610,7 @@ mod test {
     fn try_latest_version_redirect(
         path: &str,
         web: &TestFrontend,
-    ) -> Result<Option<String>, failure::Error> {
+    ) -> Result<Option<String>, anyhow::Error> {
         assert_success(path, web)?;
         let data = web.get(path).send()?.text()?;
         println!("{}", data);
@@ -629,9 +629,9 @@ mod test {
         }
     }
 
-    fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, failure::Error> {
+    fn latest_version_redirect(path: &str, web: &TestFrontend) -> Result<String, anyhow::Error> {
         try_latest_version_redirect(path, web)
-            .and_then(|v| v.ok_or_else(|| failure::format_err!("no redirect found for {}", path)))
+            .and_then(|v| v.ok_or_else(|| anyhow::format_err!("no redirect found for {}", path)))
     }
 
     #[test]
@@ -906,7 +906,7 @@ mod test {
 
     #[test]
     fn yanked_release_shows_warning_in_nav() {
-        fn has_yanked_warning(path: &str, web: &TestFrontend) -> Result<bool, failure::Error> {
+        fn has_yanked_warning(path: &str, web: &TestFrontend) -> Result<bool, anyhow::Error> {
             assert_success(path, web)?;
             let data = web.get(path).send()?.text()?;
             Ok(kuchiki::parse_html()
@@ -1116,7 +1116,7 @@ mod test {
         fn get_platform_links(
             path: &str,
             web: &TestFrontend,
-        ) -> Result<Vec<(String, String)>, failure::Error> {
+        ) -> Result<Vec<(String, String)>, anyhow::Error> {
             assert_success(path, web)?;
             let data = web.get(path).send()?.text()?;
             let dom = kuchiki::parse_html().one(data);
@@ -1140,7 +1140,7 @@ mod test {
             web: &TestFrontend,
             path: &str,
             links: &[(&str, &str)],
-        ) -> Result<(), failure::Error> {
+        ) -> Result<(), anyhow::Error> {
             let mut links = BTreeMap::from_iter(links.iter().copied());
 
             for (platform, link) in get_platform_links(path, web)? {

@@ -9,7 +9,7 @@ use crate::{
     Config, DocBuilder, DocBuilderOptions,
 };
 use chrono::{Timelike, Utc};
-use failure::Error;
+use anyhow::Error;
 use log::{debug, error, info, warn};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;

@@ -1,5 +1,5 @@
 use crate::error::Result;
-use failure::err_msg;
+use anyhow::anyhow;
 use kuchiki::traits::TendrilSink;
 use kuchiki::NodeRef;
 
@@ -10,10 +10,10 @@ pub fn extract_head_and_body(html: &str) -> Result<(String, String, String)> {
 
     let head = dom
         .select_first("head")
-        .map_err(|_| err_msg("couldn't find <head> tag in rustdoc output"))?;
+        .map_err(|_| anyhow!("couldn't find <head> tag in rustdoc output"))?;
     let body = dom
         .select_first("body")
-        .map_err(|_| err_msg("couldn't find <body> tag in rustdoc output"))?;
+        .map_err(|_| anyhow!("couldn't find <body> tag in rustdoc output"))?;
 
     let class = body
         .attributes

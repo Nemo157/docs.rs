@@ -65,7 +65,7 @@ use self::page::TemplateData;
 use crate::config::Config;
 use crate::db::Pool;
 use chrono::{DateTime, Utc};
-use failure::Error;
+use anyhow::Error;
 use handlebars_iron::{DirectorySource, HandlebarsEngine, SourceError};
 use iron::headers::{CacheControl, CacheDirective, ContentType, Expires, HttpDate};
 use iron::modifiers::Redirect;

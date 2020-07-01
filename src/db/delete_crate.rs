@@ -1,22 +1,16 @@
 use crate::storage::s3::{s3_client, S3_BUCKET_NAME};
-use failure::{Error, Fail};
 use postgres::Connection;
 use rusoto_s3::{DeleteObjectsRequest, ListObjectsV2Request, ObjectIdentifier, S3Client, S3};
+use anyhow::anyhow;
 
 /// List of directories in docs.rs's underlying storage (either the database or S3) containing a
 /// subdirectory named after the crate. Those subdirectories will be deleted.
 static STORAGE_PATHS_TO_DELETE: &[&str] = &["rustdoc", "sources"];
 
-#[derive(Debug, Fail)]
-enum CrateDeletionError {
-    #[fail(display = "crate is missing: {}", _0)]
-    MissingCrate(String),
-}
-
-pub fn delete_crate(conn: &Connection, name: &str) -> Result<(), Error> {
+pub fn delete_crate(conn: &Connection, name: &str) -> anyhow::Result<()> {
     let crate_id_res = conn.query("SELECT id FROM crates WHERE name = $1", &[&name])?;
     let crate_id = if crate_id_res.is_empty() {
-        return Err(CrateDeletionError::MissingCrate(name.into()).into());
+        return Err(anyhow!("crate is missing: {}", name));
     } else {
         crate_id_res.get(0).get("id")
     };
@@ -29,7 +23,7 @@ pub fn delete_crate(conn: &Connection, name: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn delete_from_database(conn: &Connection, name: &str, crate_id: i32) -> Result<(), Error> {
+fn delete_from_database(conn: &Connection, name: &str, crate_id: i32) -> anyhow::Result<()> {
     let transaction = conn.transaction()?;
 
     transaction.execute(
@@ -68,14 +62,14 @@ fn delete_from_database(conn: &Connection, name: &str, crate_id: i32) -> Result<
     Ok(())
 }
 
-fn delete_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
+fn delete_from_s3(s3: &S3Client, name: &str) -> anyhow::Result<()> {
     for prefix in STORAGE_PATHS_TO_DELETE {
         delete_prefix_from_s3(s3, &format!("{}/{}/", prefix, name))?;
     }
     Ok(())
 }
 
-fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
+fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> anyhow::Result<()> {
     let mut continuation_token = None;
     loop {
         let list = s3
@@ -111,7 +105,7 @@ fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
             for err in &errs {
                 log::error!("error deleting file from s3: {:?}", err);
             }
-            failure::bail!("uploading to s3 failed");
+            anyhow::bail!("uploading to s3 failed");
         }
 
         continuation_token = list.continuation_token;
@@ -124,17 +118,16 @@ fn delete_prefix_from_s3(s3: &S3Client, name: &str) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use failure::Error;
     use postgres::Connection;
 
     #[test]
     fn test_delete_from_database() {
-        fn crate_exists(conn: &Connection, name: &str) -> Result<bool, Error> {
+        fn crate_exists(conn: &Connection, name: &str) -> anyhow::Result<bool> {
             Ok(!conn
                 .query("SELECT * FROM crates WHERE name = $1;", &[&name])?
                 .is_empty())
         }
-        fn release_exists(conn: &Connection, id: i32) -> Result<bool, Error> {
+        fn release_exists(conn: &Connection, id: i32) -> anyhow::Result<bool> {
             Ok(!conn
                 .query("SELECT * FROM releases WHERE id = $1;", &[&id])?
                 .is_empty())

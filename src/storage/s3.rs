@@ -1,6 +1,6 @@
 use super::Blob;
 use chrono::{DateTime, NaiveDateTime, Utc};
-use failure::Error;
+use anyhow::Error;
 use futures::Future;
 use log::{error, warn};
 use rusoto_core::region::Region;

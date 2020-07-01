@@ -1,4 +1,5 @@
 use crate::error::Result;
+use anyhow::bail;
 use rustwide::{cmd::Command, Toolchain, Workspace};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -20,15 +21,14 @@ impl CargoMetadata {
             .args(&["metadata", "--format-version", "1"])
             .cd(source_dir)
             .log_output(false)
-            .run_capture()?;
+            .run_capture()
+            .map_err(|e| e.compat())?;
 
         let mut iter = res.stdout_lines().iter();
         let metadata = if let (Some(serialized), None) = (iter.next(), iter.next()) {
             serde_json::from_str::<DeserializedMetadata>(serialized)?
         } else {
-            return Err(::failure::err_msg(
-                "invalid output returned by `cargo metadata`",
-            ));
+            bail!("invalid output returned by `cargo metadata`");
         };
 
         // Convert from Vecs to HashMaps and HashSets to get more efficient lookups

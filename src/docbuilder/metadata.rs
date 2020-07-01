@@ -1,5 +1,5 @@
 use crate::error::Result;
-use failure::err_msg;
+use anyhow::anyhow;
 use std::collections::HashSet;
 use std::path::Path;
 use toml::{map::Map, Value};
@@ -84,7 +84,7 @@ impl Metadata {
             }
         }
 
-        Err(err_msg("Manifest not found"))
+        Err(anyhow!("Manifest not found"))
     }
 
     fn from_manifest<P: AsRef<Path>>(path: P) -> Metadata {

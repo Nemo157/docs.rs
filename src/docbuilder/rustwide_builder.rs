@@ -7,7 +7,7 @@ use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
 use crate::storage::CompressionAlgorithms;
 use crate::utils::{copy_doc_dir, parse_rustc_version, CargoMetadata};
-use failure::ResultExt;
+use anyhow::{anyhow, Context};
 use log::{debug, info, warn, LevelFilter};
 use postgres::Connection;
 use rustwide::cmd::{Command, SandboxBuilder};
@@ -85,11 +85,11 @@ impl RustwideBuilder {
         let mut builder = WorkspaceBuilder::new(Path::new(workspace_path), USER_AGENT)
             .running_inside_docker(is_docker);
         if let Ok(custom_image) = std::env::var("DOCS_RS_LOCAL_DOCKER_IMAGE") {
-            builder = builder.sandbox_image(SandboxImage::local(&custom_image)?);
+            builder = builder.sandbox_image(SandboxImage::local(&custom_image).map_err(|e| e.compat())?);
         }
 
-        let workspace = builder.init()?;
-        workspace.purge_all_build_dirs()?;
+        let workspace = builder.init().map_err(|e| e.compat())?;
+        workspace.purge_all_build_dirs().map_err(|e| e.compat())?;
 
         let toolchain_name = std::env::var("CRATESFYI_TOOLCHAIN")
             .map(Cow::Owned)
@@ -134,7 +134,7 @@ impl RustwideBuilder {
                 if let Some(&ToolchainError::NotInstalled) = err.downcast_ref::<ToolchainError>() {
                     Vec::new()
                 } else {
-                    return Err(err);
+                    return Err(err.compat().into());
                 }
             }
         };
@@ -153,14 +153,14 @@ impl RustwideBuilder {
         // and will not be reinstalled until explicitly requested by a crate.
         for target in installed_targets {
             if !targets_to_install.remove(&target) {
-                self.toolchain.remove_target(&self.workspace, &target)?;
+                self.toolchain.remove_target(&self.workspace, &target).map_err(|e| e.compat())?;
             }
         }
 
-        self.toolchain.install(&self.workspace)?;
+        self.toolchain.install(&self.workspace).map_err(|e| e.compat())?;
 
         for target in &targets_to_install {
-            self.toolchain.add_target(&self.workspace, target)?;
+            self.toolchain.add_target(&self.workspace, target).map_err(|e| e.compat())?;
         }
 
         self.rustc_version = self.detect_rustc_version()?;
@@ -176,15 +176,13 @@ impl RustwideBuilder {
         let res = Command::new(&self.workspace, self.toolchain.rustc())
             .args(&["--version"])
             .log_output(false)
-            .run_capture()?;
+            .run_capture().map_err(|e| e.compat())?;
         let mut iter = res.stdout_lines().iter();
         if let (Some(line), None) = (iter.next(), iter.next()) {
             info!("found rustc {}", line);
             Ok(line.clone())
         } else {
-            Err(::failure::err_msg(
-                "invalid output returned by `rustc --version`",
-            ))
+            Err(anyhow!("invalid output returned by `rustc --version`"))
         }
     }
 
@@ -200,20 +198,20 @@ impl RustwideBuilder {
         let mut build_dir = self
             .workspace
             .build_dir(&format!("essential-files-{}", rustc_version));
-        build_dir.purge()?;
+        build_dir.purge().map_err(|e| e.compat())?;
 
         // This is an empty library crate that is supposed to always build.
         let krate = Crate::crates_io(DUMMY_CRATE_NAME, DUMMY_CRATE_VERSION);
-        krate.fetch(&self.workspace)?;
+        krate.fetch(&self.workspace).map_err(|e| e.compat())?;
 
         build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
-            .run(|build| {
+            .run(|build| (|| -> anyhow::Result<()> {
                 let metadata = Metadata::from_source_dir(&build.host_source_dir())?;
 
                 let res = self.execute_build(HOST_TARGET, true, build, &limits, &metadata)?;
                 if !res.result.successful {
-                    failure::bail!("failed to build dummy crate for {}", self.rustc_version);
+                    anyhow::bail!("failed to build dummy crate for {}", self.rustc_version);
                 }
 
                 info!("copying essential files for {}", self.rustc_version);
@@ -235,7 +233,7 @@ impl RustwideBuilder {
                     };
                     let source_path = source.join(&file_name);
                     let dest_path = dest.path().join(&file_name);
-                    ::std::fs::copy(&source_path, &dest_path).with_context(|_| {
+                    ::std::fs::copy(&source_path, &dest_path).with_context(|| {
                         format!(
                             "couldn't copy '{}' to '{}'",
                             source_path.display(),
@@ -252,10 +250,10 @@ impl RustwideBuilder {
                 )?;
 
                 Ok(())
-            })?;
+            })().map_err(|e| failure::Error::from_boxed_compat(e.into()))).map_err(|e| e.compat())?;
 
-        build_dir.purge()?;
-        krate.purge_from_cache(&self.workspace)?;
+        build_dir.purge().map_err(|e| e.compat())?;
+        krate.purge_from_cache(&self.workspace).map_err(|e| e.compat())?;
         Ok(())
     }
 
@@ -317,20 +315,20 @@ impl RustwideBuilder {
         let limits = Limits::for_crate(&conn, name)?;
 
         let mut build_dir = self.workspace.build_dir(&format!("{}-{}", name, version));
-        build_dir.purge()?;
+        build_dir.purge().map_err(|e| e.compat())?;
 
         let krate = if let Some(path) = local {
             Crate::local(path)
         } else {
             Crate::crates_io(name, version)
         };
-        krate.fetch(&self.workspace)?;
+        krate.fetch(&self.workspace).map_err(|e| e.compat())?;
 
         let local_storage = tempfile::Builder::new().prefix("docsrs-docs").tempdir()?;
 
         let res = build_dir
             .build(&self.toolchain, &krate, self.prepare_sandbox(&limits))
-            .run(|build| {
+            .run(|build| (|| -> anyhow::Result<FullBuildResult> {
                 use crate::docbuilder::metadata::BuildTargets;
 
                 let mut files_list = None;
@@ -407,10 +405,10 @@ impl RustwideBuilder {
 
                 doc_builder.add_to_cache(name, version);
                 Ok(res)
-            })?;
+            })().map_err(|e| failure::Error::from_boxed_compat(e.into()))).map_err(|e| e.compat())?;
 
-        build_dir.purge()?;
-        krate.purge_from_cache(&self.workspace)?;
+        build_dir.purge().map_err(|e| e.compat())?;
+        krate.purge_from_cache(&self.workspace).map_err(|e| e.compat())?;
         local_storage.close()?;
         Ok(res.result.successful)
     }
@@ -476,7 +474,7 @@ impl RustwideBuilder {
             // If the explicit target is not a tier one target, we need to install it.
             if !TARGETS.contains(&target) {
                 // This is a no-op if the target is already installed.
-                self.toolchain.add_target(&self.workspace, target)?;
+                self.toolchain.add_target(&self.workspace, target).map_err(|e| e.compat())?;
             }
             cargo_args.push("--target");
             cargo_args.push(target);

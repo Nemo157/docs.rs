@@ -1,32 +1,20 @@
 use crate::db::PoolError;
 use crate::web::page::Page;
-use failure::Fail;
 use iron::prelude::*;
 use iron::status;
 use iron::Handler;
-use std::error::Error;
-use std::fmt;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, thiserror::Error)]
 pub enum Nope {
+    #[error("Requested resource not found")]
     ResourceNotFound,
+    #[error("Requested crate not found")]
     CrateNotFound,
+    #[error("Search yielded no results")]
     NoResults,
+    #[error("Internal server error")]
     InternalServerError,
 }
-
-impl fmt::Display for Nope {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(match *self {
-            Nope::ResourceNotFound => "Requested resource not found",
-            Nope::CrateNotFound => "Requested crate not found",
-            Nope::NoResults => "Search yielded no results",
-            Nope::InternalServerError => "Internal server error",
-        })
-    }
-}
-
-impl Error for Nope {}
 
 impl Handler for Nope {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
@@ -76,6 +64,6 @@ impl Handler for Nope {
 
 impl From<PoolError> for IronError {
     fn from(err: PoolError) -> IronError {
-        IronError::new(err.compat(), status::InternalServerError)
+        IronError::new(err, status::InternalServerError)
     }
 }
