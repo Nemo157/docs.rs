@@ -10,36 +10,12 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
 
-    strategy:
-      fail-fast: false
-
     steps:
       - uses: actions/checkout@master
         with:
           fetch-depth: 2
 
-      - name: Install stable Rust
-        run: rustup update stable && rustup default stable
-
-      - name: Set rustc version
-        run: echo "::set-env name=CURRENT_RUSTC_VERSION::$(rustc -V)"
-
-      # Caching
-      - name: Cache Cargo directories
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cargo/bin
-            ~/.cargo/git
-            ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Cache Cargo Build
-        uses: actions/cache@v2
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-build-target-${{ env.CURRENT_RUSTC_VERSION }}-
+      - uses: hecrj/setup-rust-action@v1
 
       - name: Launch the postgres and min.io images
         run: |
