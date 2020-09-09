@@ -42,11 +42,6 @@ impl File {
         )));
         response
     }
-
-    /// Checks if mime type of file is "application/x-empty"
-    pub fn is_empty(&self) -> bool {
-        self.0.mime == "application/x-empty"
-    }
 }
 
 /// Database based file handler for iron

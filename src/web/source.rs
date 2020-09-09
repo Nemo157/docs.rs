@@ -198,16 +198,25 @@ pub fn source_browser_handler(req: &mut Request) -> IronResult<Response> {
     };
 
     let (file_content, is_rust_source) = if let Some(file) = file {
-        // serve the file with DatabaseFileHandler if file isn't text and not empty
-        if !file.0.mime.starts_with("text") && !file.is_empty() {
-            return Ok(file.serve());
-        } else if file.0.mime.starts_with("text") && !file.is_empty() {
+        let allowed_mime = file.0.mime.starts_with("text/")
+            || matches!(
+                file.0.mime.as_str(),
+                "application/json"
+                    | "application/javascript"
+                    | "application/toml"
+                    | "application/x-empty"
+            );
+        // Only serve files that are text or a subset of "textlike" allowed types
+        if allowed_mime {
             (
                 String::from_utf8(file.0.content).ok(),
                 file.0.path.ends_with(".rs"),
             )
         } else {
-            (None, false)
+            (
+                Some(format!("Sorry, we do not support rendering {} files", file.0.mime)),
+                false,
+            )
         }
     } else {
         (None, false)
