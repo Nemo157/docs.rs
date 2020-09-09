@@ -261,7 +261,7 @@ fn detect_mime(file_path: &Path) -> Result<&'static str, Error> {
                 Some("rs") => "text/rust",
                 Some("markdown") => "text/markdown",
                 Some("css") => "text/css",
-                Some("toml") => "text/toml",
+                Some("toml") => "application/toml",
                 Some("js") => "application/javascript",
                 Some("json") => "application/json",
                 _ => mime,
