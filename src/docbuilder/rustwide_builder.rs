@@ -287,6 +287,16 @@ impl RustwideBuilder {
         self.build_package(&package.name, &package.version, PackageKind::Local(path))
     }
 
+    fn ensure_target(&self, target: &str) -> Result<()> {
+        // If the explicit target is not a tier one target, we need to install it.
+        if !docsrs_metadata::DEFAULT_TARGETS.contains(&target) {
+            // This is a no-op if the target is already installed.
+            self.toolchain.add_target(&self.workspace, target)?;
+        }
+
+        Ok(())
+    }
+
     pub fn build_package(
         &mut self,
         name: &str,
@@ -537,9 +547,18 @@ impl RustwideBuilder {
         storage.set_max_size(limits.max_log_size());
 
         let successful = logging::capture(&storage, || {
-            self.prepare_command(build, target, metadata, limits, rustdoc_flags)
-                .and_then(|command| command.run().map_err(failure::Error::from))
-                .is_ok()
+            (|| {
+                self.ensure_target(target)?;
+                let extra_flags = self
+                    .run_check(build, target, metadata, limits)
+                    .context("Running check")?;
+                rustdoc_flags.extend(extra_flags);
+                self.prepare_command(build, target, metadata, limits, rustdoc_flags)?
+                    .run()?;
+                Result::Ok(())
+            })()
+            .map_err(|err| log::error!("failure during build: {:?}", err))
+            .is_ok()
         });
         let doc_coverage = if successful {
             self.get_coverage(target, build, metadata, limits)?
@@ -573,6 +592,102 @@ impl RustwideBuilder {
         })
     }
 
+    /// Runs `cargo check` for the build, returning a list of extra rustdoc flags gathered during it
+    fn run_check(
+        &self,
+        build: &Build,
+        target: &str,
+        docsrs_metadata: &Metadata,
+        limits: &Limits,
+    ) -> Result<Vec<String>> {
+        let mut command = build
+            .cargo()
+            .log_output(false)
+            .timeout(Some(limits.timeout()))
+            .no_output_timeout(None)
+            .args(&["metadata", "--format-version=1"])
+            .args(&docsrs_metadata.just_cargo_args());
+
+        for (key, val) in docsrs_metadata.environment_variables() {
+            command = command.env(key, val);
+        }
+
+        let output = command.run_capture()?;
+        let metadata: cargo_metadata::Metadata = serde_json::from_str(
+            &output
+                .stdout_lines()
+                .iter()
+                .map(|s| &**s)
+                .collect::<String>(),
+        )?;
+
+        let mut rustc_args = docsrs_metadata.just_rustc_args();
+        rustc_args.push("--cap-lints=warn".into());
+
+        let mut command = build
+            .cargo()
+            .timeout(Some(limits.timeout()))
+            .no_output_timeout(None)
+            .args(&["check"])
+            .args(&docsrs_metadata.just_cargo_args())
+            .args(&[
+                "--message-format=json",
+                "-Zunstable-options",
+                &format!("--config=build.rustflags={}", toml::to_string(&rustc_args)?),
+            ]);
+
+        for (key, val) in docsrs_metadata.environment_variables() {
+            command = command.env(key, val);
+        }
+
+        if let Some(cpu_limit) = self.config.build_cpu_limit {
+            command = command.args(&["--jobs", &cpu_limit.to_string()]);
+        }
+
+        if target != HOST_TARGET {
+            command = command.args(&["--target", target]);
+        }
+
+        let mut flags = Vec::new();
+
+        command
+            .process_lines(&mut |line, action| {
+                let _ = (|| {
+                    // mix of stderr and stdout, if parsing fails assume it's stderr that we don't care
+                    // about
+                    if let Ok(msg) = serde_json::from_str(line) {
+                        action.remove_line(); // not important to see these in logs
+                        if let cargo_metadata::Message::CompilerArtifact(msg) = msg {
+                            let package = metadata
+                                .packages
+                                .iter()
+                                .find(|p| p.id == msg.package_id)
+                                .ok_or_else(|| {
+                                    failure::err_msg("artifact for non-existent package")
+                                })?;
+                            // TODO: Filter out dependencies that can't contribute to docs (build-deps,
+                            // proc-macros)
+                            for filename in &msg.filenames {
+                                flags.push(format!(
+                                    "--extern-html-root-url={}=https://docs.rs/{}/{}",
+                                    filename.to_str().ok_or_else(|| failure::err_msg(
+                                        "non-utf-8 artifact name"
+                                    ))?,
+                                    package.name,
+                                    package.version
+                                ));
+                            }
+                        }
+                    }
+                    Result::Ok(())
+                })()
+                .map_err(|e| log::error!("Ignoring error during check: {:?}", e));
+            })
+            .run()?;
+
+        Ok(flags)
+    }
+
     fn prepare_command<'ws, 'pl>(
         &self,
         build: &'ws Build,
@@ -581,12 +696,6 @@ impl RustwideBuilder {
         limits: &Limits,
         mut rustdoc_flags_extras: Vec<String>,
     ) -> Result<Command<'ws, 'pl>> {
-        // If the explicit target is not a tier one target, we need to install it.
-        if !docsrs_metadata::DEFAULT_TARGETS.contains(&target) {
-            // This is a no-op if the target is already installed.
-            self.toolchain.add_target(&self.workspace, target)?;
-        }
-
         // Add docs.rs specific arguments
         let mut cargo_args = Vec::new();
         if let Some(cpu_limit) = self.config.build_cpu_limit {

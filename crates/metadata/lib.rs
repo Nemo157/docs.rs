@@ -216,6 +216,31 @@ impl Metadata {
         }
     }
 
+    /// Return the cargo specific arguments requested by the metadata
+    pub fn just_cargo_args(&self) -> Vec<String> {
+        let mut cargo_args = vec![];
+
+        if let Some(features) = &self.features {
+            cargo_args.push("--features".into());
+            cargo_args.push(features.join(" "));
+        }
+
+        if self.all_features {
+            cargo_args.push("--all-features".into());
+        }
+
+        if self.no_default_features {
+            cargo_args.push("--no-default-features".into());
+        }
+
+        cargo_args
+    }
+
+    /// Return the rustc specific arguments requested by the metadata
+    pub fn just_rustc_args(&self) -> Vec<String> {
+        self.rustc_args.clone()
+    }
+
     /// Return the arguments that should be passed to `cargo`.
     ///
     /// This will always include `rustdoc --lib --`.
@@ -231,28 +256,7 @@ impl Metadata {
     pub fn cargo_args(&self, additional_args: &[String], rustdoc_args: &[String]) -> Vec<String> {
         let mut cargo_args: Vec<String> = vec!["rustdoc".into(), "--lib".into()];
 
-        if let Some(features) = &self.features {
-            cargo_args.push("--features".into());
-            cargo_args.push(features.join(" "));
-        }
-
-        if self.all_features {
-            cargo_args.push("--all-features".into());
-        }
-
-        if self.no_default_features {
-            cargo_args.push("--no-default-features".into());
-        }
-
-        // Pass `RUSTFLAGS` using `cargo --config`, which handles whitespace correctly.
-        if !self.rustc_args.is_empty() {
-            cargo_args.push("-Z".into());
-            cargo_args.push("unstable-options".into());
-            cargo_args.push("--config".into());
-            let rustflags =
-                toml::to_string(&self.rustc_args).expect("serializing a string should never fail");
-            cargo_args.push(format!("build.rustflags={}", rustflags));
-        }
+        cargo_args.extend(self.just_cargo_args());
 
         cargo_args.extend(additional_args.iter().map(|s| s.to_owned()));
         cargo_args.push("--".into());
