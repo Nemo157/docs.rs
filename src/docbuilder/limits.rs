@@ -19,7 +19,7 @@ impl Default for Limits {
             timeout: Duration::from_secs(15 * 60), // 15 minutes
             targets: 10,
             networking: false,
-            max_log_size: 100 * 1024, // 100 KB
+            max_log_size: 10000 * 1024, // 100 KB
         }
     }
 }

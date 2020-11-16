@@ -258,6 +258,15 @@ impl Metadata {
 
         cargo_args.extend(self.just_cargo_args());
 
+        if !self.rustc_args.is_empty() {
+            cargo_args.push("-Z".into());
+            cargo_args.push("unstable-options".into());
+            cargo_args.push("--config".into());
+            let rustflags =
+                toml::to_string(&self.rustc_args).expect("serializing a string should never fail");
+            cargo_args.push(format!("build.rustflags={}", rustflags));
+        }
+
         cargo_args.extend(additional_args.iter().map(|s| s.to_owned()));
         cargo_args.push("--".into());
         cargo_args.extend_from_slice(&self.rustdoc_args);

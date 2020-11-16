@@ -621,8 +621,7 @@ impl RustwideBuilder {
                 .collect::<String>(),
         )?;
 
-        let mut rustc_args = docsrs_metadata.just_rustc_args();
-        rustc_args.push("--cap-lints=warn".into());
+        let rustc_args = docsrs_metadata.just_rustc_args();
 
         let mut command = build
             .cargo()
