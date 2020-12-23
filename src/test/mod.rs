@@ -15,6 +15,7 @@ use reqwest::{
 };
 use std::fs;
 use std::{panic, sync::Arc};
+use tokio::runtime::{Handle, Runtime};
 
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<(), Error>) {
     let _ = dotenv::dotenv();
@@ -99,6 +100,7 @@ pub(crate) struct TestEnvironment {
     db: OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
     index: OnceCell<Arc<Index>>,
+    runtime: OnceCell<Runtime>,
     metrics: OnceCell<Arc<Metrics>>,
     frontend: OnceCell<TestFrontend>,
 }
@@ -121,6 +123,7 @@ impl TestEnvironment {
             db: OnceCell::new(),
             storage: OnceCell::new(),
             index: OnceCell::new(),
+            runtime: OnceCell::new(),
             metrics: OnceCell::new(),
             frontend: OnceCell::new(),
         }
@@ -188,8 +191,13 @@ impl TestEnvironment {
         self.storage
             .get_or_init(|| {
                 Arc::new(
-                    Storage::new(self.db().pool(), self.metrics(), &*self.config())
-                        .expect("failed to initialize the storage"),
+                    Storage::new(
+                        self.db().pool(),
+                        self.metrics(),
+                        &*self.config(),
+                        self.runtime(),
+                    )
+                    .expect("failed to initialize the storage"),
                 )
             })
             .clone()
@@ -209,6 +217,13 @@ impl TestEnvironment {
                         .expect("failed to initialize the index"),
                 )
             })
+            .clone()
+    }
+
+    pub(crate) fn runtime(&self) -> Handle {
+        self.runtime
+            .get_or_init(|| Runtime::new().unwrap())
+            .handle()
             .clone()
     }
 
@@ -250,6 +265,10 @@ impl Context for TestEnvironment {
 
     fn index(&self) -> Result<Arc<Index>, Error> {
         Ok(self.index())
+    }
+
+    fn runtime(&self) -> Result<Handle, Error> {
+        Ok(self.runtime())
     }
 }
 

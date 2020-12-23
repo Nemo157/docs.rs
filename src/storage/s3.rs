@@ -13,11 +13,11 @@ use rusoto_s3::{
     ListObjectsV2Request, ObjectIdentifier, PutObjectRequest, S3Client, S3,
 };
 use std::{convert::TryInto, io::Write, sync::Arc};
-use tokio::runtime::Runtime;
+use tokio::runtime::Handle;
 
 pub(super) struct S3Backend {
     client: S3Client,
-    runtime: Runtime,
+    runtime: Handle,
     bucket: String,
     metrics: Arc<Metrics>,
     #[cfg(test)]
@@ -25,9 +25,11 @@ pub(super) struct S3Backend {
 }
 
 impl S3Backend {
-    pub(super) fn new(metrics: Arc<Metrics>, config: &Config) -> Result<Self, Error> {
-        let runtime = Runtime::new()?;
-
+    pub(super) fn new(
+        metrics: Arc<Metrics>,
+        config: &Config,
+        runtime: Handle,
+    ) -> Result<Self, Error> {
         // Connect to S3
         let client = S3Client::new_with(
             rusoto_core::request::HttpClient::new()?,
