@@ -100,7 +100,6 @@ pub(crate) struct TestEnvironment {
     db: OnceCell<TestDatabase>,
     storage: OnceCell<Arc<Storage>>,
     index: OnceCell<Arc<Index>>,
-    runtime: OnceCell<Runtime>,
     metrics: OnceCell<Arc<Metrics>>,
     frontend: OnceCell<TestFrontend>,
 }
@@ -123,7 +122,6 @@ impl TestEnvironment {
             db: OnceCell::new(),
             storage: OnceCell::new(),
             index: OnceCell::new(),
-            runtime: OnceCell::new(),
             metrics: OnceCell::new(),
             frontend: OnceCell::new(),
         }
@@ -221,7 +219,8 @@ impl TestEnvironment {
     }
 
     pub(crate) fn runtime(&self) -> Handle {
-        self.runtime
+        static RUNTIME: once_cell::sync::OnceCell<Runtime> = once_cell::sync::OnceCell::new();
+        RUNTIME
             .get_or_init(|| Runtime::new().unwrap())
             .handle()
             .clone()
