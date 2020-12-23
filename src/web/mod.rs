@@ -4,6 +4,8 @@ pub(crate) mod page;
 
 use log::{debug, info};
 use serde_json::Value;
+use std::str::FromStr;
+use warp::Filter;
 
 /// ctry! (cratesfyitry) is extremely similar to try! and itry!
 /// except it returns an error page response instead of plain Err.
@@ -404,7 +406,11 @@ fn render_markdown(text: &str) -> String {
 
 #[must_use = "`Server` blocks indefinitely when dropped"]
 pub struct Server {
-    inner: Listening,
+    task: tokio::task::JoinHandle<()>,
+    runtime: tokio::runtime::Handle,
+    shutdown: Arc<tokio::sync::Notify>,
+    socket: SocketAddr,
+    listening: Listening,
 }
 
 impl Server {
@@ -429,30 +435,102 @@ impl Server {
         template_data: Arc<TemplateData>,
         context: &dyn Context,
     ) -> Result<Self, Error> {
-        let cratesfyi = CratesfyiHandler::new(template_data, context)?;
-        let mut iron = Iron::new(cratesfyi);
+        let mut iron = Iron::new(CratesfyiHandler::new(template_data, context)?);
         if cfg!(test) {
             iron.threads = 1;
         }
-        let inner = iron.http(addr).unwrap_or_else(|_| panic!("Failed to bind to socket on {}", addr));
+        let listening = iron.http((
+            "127.0.0.1",
+            port_check::free_local_port()
+                .ok_or_else(|| failure::err_msg("Failed to find free port"))?,
+        ))?;
 
-        Ok(Server { inner })
+        let iron_url = Arc::new(format!("http://{}", listening.socket));
+
+        let warp_service =
+            warp::service(warp::path("testing-warp-dont-worry-bout-it").map(|| "yay"));
+
+        let mut socket = SocketAddr::from_str(addr)?;
+        if socket.port() == 0 {
+            socket.set_port(
+                port_check::free_local_port()
+                    .ok_or_else(|| failure::err_msg("Failed to find free port"))?,
+            );
+        }
+        let shutdown = Arc::new(tokio::sync::Notify::new());
+        let runtime = context.runtime()?;
+
+        let task = runtime.spawn({
+            let shutdown = shutdown.clone();
+            async move {
+                let server = hyper::Server::bind(&socket).serve(hyper::service::make_service_fn(
+                    move |socket: &hyper::server::conn::AddrStream| {
+                        let remote_addr = socket.remote_addr();
+                        let iron_url = iron_url.clone();
+                        async move {
+                            Ok::<_, failure::Error>(hyper::service::service_fn(move |req| {
+                                let iron_url = iron_url.clone();
+                                async move {
+                                    use hyper::service::Service;
+                                    let mut warp_service = warp_service;
+                                    futures::future::poll_fn(|cx| warp_service.poll_ready(cx))
+                                        .await
+                                        .unwrap_or_else(|_| unreachable!());
+                                    // We have no POST endpoints, so there should never be a body
+                                    let (parts, _) = req.into_parts();
+                                    let mut req = hyper::Request::builder()
+                                        .method(parts.method.clone())
+                                        .uri(parts.uri.clone())
+                                        .version(parts.version);
+                                    if let Some(headers) = req.headers_mut() {
+                                        *headers = parts.headers.clone();
+                                    }
+                                    let req = req.body(hyper::Body::empty())?;
+                                    let res = warp_service
+                                        .call(req)
+                                        .await
+                                        .unwrap_or_else(|_| unreachable!());
+                                    if res.status() == hyper::StatusCode::NOT_FOUND {
+                                        let req =
+                                            hyper::Request::from_parts(parts, hyper::Body::empty());
+                                        Ok(hyper_reverse_proxy::call(
+                                            remote_addr.ip(),
+                                            &iron_url,
+                                            req,
+                                        )
+                                        .await
+                                        .map_err(|_| failure::err_msg("unknown"))?)
+                                    } else {
+                                        Ok::<_, failure::Error>(res)
+                                    }
+                                }
+                            }))
+                        }
+                    },
+                ));
+                server
+                    .with_graceful_shutdown(async move { shutdown.notified().await })
+                    .await
+                    .unwrap();
+            }
+        });
+        Ok(Server {
+            listening,
+            shutdown,
+            runtime,
+            task,
+            socket,
+        })
     }
 
     pub(crate) fn addr(&self) -> SocketAddr {
-        self.inner.socket
+        self.socket
     }
 
-    /// Iron is bugged, and it never closes the server even when the listener is dropped. To
-    /// avoid never-ending tests this method forgets about the server, leaking it and allowing the
-    /// program to end.
-    ///
-    /// The OS will then close all the dangling servers once the process exits.
-    ///
-    /// https://docs.rs/iron/0.5/iron/struct.Listening.html#method.close
-    #[cfg(test)]
-    pub(crate) fn leak(self) {
-        std::mem::forget(self.inner);
+    pub(crate) fn shutdown(self) {
+        std::mem::forget(self.listening);
+        self.shutdown.notify();
+        self.runtime.block_on(self.task).unwrap();
     }
 }
 
@@ -942,6 +1020,20 @@ mod test {
                 .unwrap()
                 .count();
             assert_eq!(tabindex, 1);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_warp() {
+        wrapper(|env| {
+            assert_eq!(
+                env.frontend()
+                    .get("/testing-warp-dont-worry-bout-it")
+                    .send()?
+                    .text()?,
+                "yay"
+            );
             Ok(())
         });
     }

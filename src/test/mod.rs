@@ -126,8 +126,8 @@ impl TestEnvironment {
     }
 
     fn cleanup(self) {
-        if let Some(frontend) = self.frontend.into_inner() {
-            frontend.server.leak();
+        if let Some(mut frontend) = self.frontend.into_inner() {
+            frontend.server.shutdown();
         }
         if let Some(storage) = self.storage.get() {
             storage
