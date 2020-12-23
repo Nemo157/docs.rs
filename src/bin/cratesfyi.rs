@@ -13,6 +13,7 @@ use failure::{err_msg, Error, ResultExt};
 use once_cell::sync::OnceCell;
 use structopt::StructOpt;
 use strum::VariantNames;
+use tokio::runtime::{Handle, Runtime};
 
 pub fn main() {
     let _ = dotenv::dotenv();
@@ -542,6 +543,7 @@ struct BinContext {
     pool: OnceCell<Pool>,
     metrics: OnceCell<Arc<Metrics>>,
     index: OnceCell<Arc<Index>>,
+    runtime: OnceCell<Runtime>,
 }
 
 impl BinContext {
@@ -553,6 +555,7 @@ impl BinContext {
             pool: OnceCell::new(),
             metrics: OnceCell::new(),
             index: OnceCell::new(),
+            runtime: OnceCell::new(),
         }
     }
 
@@ -583,6 +586,7 @@ impl Context for BinContext {
                     self.pool()?,
                     self.metrics()?,
                     &*self.config()?,
+                    self.runtime()?,
                 )?))
             })?
             .clone())
@@ -623,5 +627,9 @@ impl Context for BinContext {
                 ))
             })?
             .clone())
+    }
+
+    fn runtime(&self) -> Result<Handle, Error> {
+        Ok(self.runtime.get_or_try_init(Runtime::new)?.handle().clone())
     }
 }
