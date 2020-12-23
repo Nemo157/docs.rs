@@ -493,13 +493,14 @@ impl Server {
                                     if res.status() == hyper::StatusCode::NOT_FOUND {
                                         let req =
                                             hyper::Request::from_parts(parts, hyper::Body::empty());
-                                        Ok(hyper_reverse_proxy::call(
+                                        let res = tokio::time::timeout(std::time::Duration::from_secs(5), hyper_reverse_proxy::call(
                                             remote_addr.ip(),
                                             &iron_url,
                                             req,
-                                        )
-                                        .await
-                                        .map_err(|_| failure::err_msg("unknown"))?)
+                                        ))
+                                        .await?
+                                        .map_err(|_| failure::err_msg("unknown"))?;
+                                        Ok(res)
                                     } else {
                                         Ok::<_, failure::Error>(res)
                                     }
