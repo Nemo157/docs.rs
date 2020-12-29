@@ -1,7 +1,7 @@
 //! rustdoc handler
 
 use crate::{
-    db::Pool,
+    db::{Pool, types::BuildStatus},
     repositories::RepositoryStatsUpdater,
     storage::rustdoc_archive_path,
     utils::{self, spawn_blocking},
@@ -484,7 +484,7 @@ pub(crate) async fn rustdoc_html_server_handler(
 
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `[/:target]/.*`
-    if req_path.first().copied() == Some(&krate.metadata.default_target) {
+    if req_path.first().copied() == krate.metadata.default_target.as_deref() {
         return redirect(
             &params.name,
             &version_or_latest,
@@ -624,9 +624,10 @@ pub(crate) async fn rustdoc_html_server_handler(
     };
 
     // Find the path of the latest version for the `Go to latest` and `Permalink` links
-    let target_redirect = if latest_release.build_status {
+    let target_redirect = if latest_release.build_status == BuildStatus::Success {
         let target = if target.is_empty() {
-            &krate.metadata.default_target
+            let default_target = krate.metadata.default_target.as_deref();
+            ctry!(req, default_target.context("missing default target for successful build"))
         } else {
             target
         };
@@ -801,7 +802,7 @@ pub(crate) async fn target_redirect_handler(
         let mut pieces: Vec<_> = req_path.split('/').map(str::to_owned).collect();
 
         if let Some(target) = pieces.first() {
-            if target == &crate_details.metadata.default_target {
+            if Some(target) == &crate_details.metadata.default_target.as_deref() {
                 pieces.remove(0);
             }
         }

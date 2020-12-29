@@ -460,12 +460,12 @@ pub(crate) struct MetaData {
     pub(crate) description: Option<String>,
     pub(crate) target_name: Option<String>,
     pub(crate) rustdoc_status: bool,
-    pub(crate) default_target: String,
+    pub(crate) default_target: Option<String>,
     pub(crate) doc_targets: Vec<String>,
     pub(crate) yanked: bool,
     /// CSS file to use depending on the rustdoc version used to generate this version of this
     /// crate.
-    pub(crate) rustdoc_css_file: String,
+    pub(crate) rustdoc_css_file: Option<String>,
 }
 
 impl MetaData {
@@ -500,7 +500,7 @@ impl MetaData {
             default_target: row.get(5),
             doc_targets: MetaData::parse_doc_targets(row.get(6)),
             yanked: row.get(7),
-            rustdoc_css_file: get_correct_docsrs_style_file(row.get(8)).unwrap(),
+            rustdoc_css_file: row.get::<_, Option<&str>>(8).map(get_correct_docsrs_style_file).transpose().unwrap(),
         })
         .ok_or_else(|| anyhow!("missing metadata for {} {}", name, version))
     }
@@ -891,7 +891,7 @@ mod test {
                 "arm64-unknown-linux-gnu".to_string(),
             ],
             yanked: false,
-            rustdoc_css_file: "rustdoc.css".to_string(),
+            rustdoc_css_file: Some("rustdoc.css".to_string()),
         };
 
         let correct_json = json!({
@@ -969,7 +969,7 @@ mod test {
                     default_target: "x86_64-unknown-linux-gnu".to_string(),
                     doc_targets: vec![],
                     yanked: false,
-                    rustdoc_css_file: "rustdoc.css".to_string(),
+                    rustdoc_css_file: Some("rustdoc.css".to_string()),
                 },
             );
             Ok(())

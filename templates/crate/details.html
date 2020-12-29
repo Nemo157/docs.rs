@@ -150,14 +150,14 @@
                     </div>
 
                 {# If the build succeeded, isn't yanked and is a library #}
-                {%- elif details.build_status -%}
+                {%- elif details.build_status == "success" -%}
                     {# If there are no docs display a warning #}
                     {%- if not details.rustdoc_status -%}
                         <div class="warning">{{ details.name }}-{{ details.version }} doesn't have any documentation.</div>
                     {%- endif -%}
 
                 {# If the build failed, the release isn't yanked and the release is a library #}
-                {%- else -%}
+                {%- elif details.build_status == "failure" -%}
                     {# Display a warning telling the user we failed to build the docs #}
                     <div class="warning">
                         docs.rs failed to build {{ details.name }}-{{ details.version }}
@@ -180,6 +180,8 @@
                             </a>
                         </div>
                     {%- endif -%}
+                {%- elif details.build_status == "in progress" -%}
+                    TODO
                 {%- endif -%}
 
                 {# If there's a readme, display it #}

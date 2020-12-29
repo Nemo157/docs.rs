@@ -1,6 +1,6 @@
 use super::{cache::CachePolicy, headers::CanonicalUrl, MatchSemver};
 use crate::{
-    db::Pool,
+    db::{Pool, types::BuildStatus},
     docbuilder::Limits,
     impl_axum_webpage,
     utils::spawn_blocking,
@@ -21,7 +21,7 @@ pub(crate) struct Build {
     id: i32,
     rustc_version: String,
     docsrs_version: String,
-    build_status: bool,
+    build_status: Option<bool>,
     build_time: DateTime<Utc>,
 }
 
@@ -137,8 +137,12 @@ fn get_builds(conn: &mut postgres::Client, name: &str, version: &str) -> Result<
         .map(|row| Build {
             id: row.get("id"),
             rustc_version: row.get("rustc_version"),
-            docsrs_version: row.get("docsrs_version"),
-            build_status: row.get("build_status"),
+            docsrs_version: row.get("cratesfyi_version"),
+            build_status: match row.get("build_status") {
+                BuildStatus::Success => Some(true),
+                BuildStatus::Failure => Some(false),
+                BuildStatus::InProgress => None,
+            },
             build_time: row.get("build_time"),
         })
         .collect())

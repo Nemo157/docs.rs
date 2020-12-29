@@ -153,7 +153,7 @@ impl FileList {
                     default_target: row.get(6),
                     doc_targets: MetaData::parse_doc_targets(row.get(7)),
                     yanked: row.get(8),
-                    rustdoc_css_file: get_correct_docsrs_style_file(row.get(9))?,
+                    rustdoc_css_file: row.get::<Option<&str>>(9).map(get_correct_docsrs_style_file).transpose()?,
                 },
                 files: file_list,
             }))

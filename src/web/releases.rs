@@ -90,7 +90,7 @@ pub(crate) fn get_releases(
         INNER JOIN builds ON releases.id = builds.rid
         LEFT JOIN repositories ON releases.repository_id = repositories.id
         WHERE
-            ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE))
+            ((NOT $3) OR (releases.build_status != 'success' AND releases.is_library = TRUE))
             AND {0} IS NOT NULL
 
         ORDER BY {0} DESC

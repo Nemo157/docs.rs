@@ -1,7 +1,7 @@
 use super::{markdown, match_version, MatchSemver, MetaData};
 use crate::utils::{get_correct_docsrs_style_file, report_error, spawn_blocking};
 use crate::{
-    db::Pool,
+    db::{Pool, types::BuildStatus},
     impl_axum_webpage,
     repositories::RepositoryStatsUpdater,
     web::{
@@ -25,7 +25,7 @@ use std::sync::Arc;
 // TODO: Add target name and versions
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct CrateDetails {
+pub(crate) struct CrateDetails {
     name: String,
     version: String,
     description: Option<String>,
@@ -36,7 +36,7 @@ pub struct CrateDetails {
     #[serde(serialize_with = "optional_markdown")]
     rustdoc: Option<String>, // this is description_long in database
     release_time: DateTime<Utc>,
-    build_status: bool,
+    build_status: BuildStatus,
     last_successful_build: Option<String>,
     pub rustdoc_status: bool,
     pub archive_storage: bool,
@@ -81,10 +81,10 @@ where
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct Release {
+pub(crate) struct Release {
     pub id: i32,
     pub version: semver::Version,
-    pub build_status: bool,
+    pub build_status: BuildStatus,
     pub yanked: bool,
     pub is_library: bool,
     pub rustdoc_status: bool,
@@ -176,7 +176,7 @@ impl CrateDetails {
             default_target: krate.get("default_target"),
             doc_targets: MetaData::parse_doc_targets(krate.get("doc_targets")),
             yanked: krate.get("yanked"),
-            rustdoc_css_file: get_correct_docsrs_style_file(krate.get("doc_rustc_version"))?,
+            rustdoc_css_file: krate.get::<_, Option<&str>>("doc_rustc_version").map(get_correct_docsrs_style_file).transpose()?,
         };
 
         let mut crate_details = CrateDetails {
@@ -225,11 +225,11 @@ impl CrateDetails {
             .map(|row| (row.get("login"), row.get("avatar")))
             .collect();
 
-        if !crate_details.build_status {
+        if crate_details.build_status == BuildStatus::Success {
             crate_details.last_successful_build = crate_details
                 .releases
                 .iter()
-                .filter(|release| release.build_status && !release.yanked)
+                .filter(|release| release.build_status == BuildStatus::Success && !release.yanked)
                 .map(|release| release.version.to_string())
                 .next();
         }
@@ -574,7 +574,7 @@ mod tests {
                 vec![
                     Release {
                         version: semver::Version::parse("1.0.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: true,
@@ -583,7 +583,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.12.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: true,
@@ -592,7 +592,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.3.0")?,
-                        build_status: false,
+                        build_status: BuildStatus::Failure,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: false,
@@ -601,7 +601,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.2.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: true,
                         is_library: true,
                         rustdoc_status: true,
@@ -610,7 +610,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.2.0-alpha")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: true,
@@ -619,7 +619,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.1.1")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: true,
@@ -628,7 +628,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.1.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                         rustdoc_status: true,
@@ -637,7 +637,7 @@ mod tests {
                     },
                     Release {
                         version: semver::Version::parse("0.0.1")?,
-                        build_status: false,
+                        build_status: BuildStatus::Failure,
                         yanked: false,
                         is_library: false,
                         rustdoc_status: false,

@@ -889,6 +889,52 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             "ALTER TYPE feature DROP ATTRIBUTE optional_dependency;",
             "ALTER TYPE feature ADD ATTRIBUTE optional_dependency BOOL;"
         ),
+        sql_migration!(
+            context,
+            39,
+            "update build_status to be multi-stage",
+            // upgrade
+            "
+                CREATE TYPE build_status AS ENUM (
+                    'in_progress',
+                    'success',
+                    'failure'
+                );
+                ALTER TABLE releases ALTER doc_rustc_version DROP NOT NULL;
+                ALTER TABLE releases ALTER default_target DROP NOT NULL;
+                ALTER TABLE releases ALTER build_status DROP DEFAULT;
+                ALTER TABLE releases ALTER build_status
+                    TYPE build_status
+                    USING CASE WHEN build_status
+                        THEN 'success'::build_status
+                        ELSE 'failure'::build_status
+                    END;
+                ALTER TABLE builds ALTER build_status
+                    TYPE build_status
+                    USING CASE WHEN build_status
+                        THEN 'success'::build_status
+                        ELSE 'failure'::build_status
+                    END;
+            ",
+            // downgrade
+            "
+                LOCK builds, releases;
+                DELETE FROM compression_rels USING releases WHERE release = releases.id AND build_status = 'in_progress';
+                DELETE FROM keyword_rels USING releases WHERE rid = releases.id AND build_status = 'in_progress';
+                DELETE FROM builds WHERE build_status = 'in_progress';
+                DELETE FROM releases WHERE build_status = 'in_progress';
+                ALTER TABLE builds ALTER build_status
+                    TYPE BOOL
+                    USING build_status = 'success';
+                ALTER TABLE releases ALTER build_status
+                    TYPE BOOL
+                    USING build_status = 'success';
+                ALTER TABLE releases ALTER build_status SET DEFAULT false;
+                ALTER TABLE releases ALTER default_target SET NOT NULL;
+                ALTER TABLE releases ALTER doc_rustc_version SET NOT NULL;
+                DROP TYPE build_status;
+            ",
+        ),
     ];
 
     for migration in migrations {

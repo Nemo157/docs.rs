@@ -1,7 +1,8 @@
 //! Database operations
 
 pub(crate) use self::add_package::{
-    add_build_into_database, add_doc_coverage, add_package_into_database,
+    add_build_into_database, add_doc_coverage, add_release_into_database, update_build_in_database, update_release_in_database,
+    add_compression_into_database,
 };
 pub use self::{
     add_package::update_crate_data_in_database,

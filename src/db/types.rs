@@ -8,6 +8,17 @@ pub struct Feature {
     pub(crate) subfeatures: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, FromSql, ToSql)]
+#[postgres(name = "build_status")]
+pub(crate) enum BuildStatus {
+    #[postgres(name = "success")]
+    Success,
+    #[postgres(name = "failure")]
+    Failure,
+    #[postgres(name = "in_progress")]
+    InProgress,
+}
+
 impl Feature {
     pub fn new(name: String, subfeatures: Vec<String>) -> Self {
         Feature { name, subfeatures }
