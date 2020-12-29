@@ -1,5 +1,5 @@
 use crate::{
-    db::Pool,
+    db::{Pool, types::BuildStatus},
     impl_webpage,
     web::{file::File, page::WebPage, MetaData, Nope},
     Config, Storage,
@@ -14,7 +14,7 @@ pub(crate) struct BuildDetails {
     id: i32,
     rustc_version: String,
     docsrs_version: String,
-    build_status: bool,
+    build_status: BuildStatus,
     build_time: DateTime<Utc>,
     output: String,
 }

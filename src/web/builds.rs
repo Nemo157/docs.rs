@@ -1,5 +1,5 @@
 use crate::{
-    db::Pool,
+    db::{Pool, types::BuildStatus},
     docbuilder::Limits,
     impl_webpage,
     web::{page::WebPage, MetaData},
@@ -19,7 +19,7 @@ pub(crate) struct Build {
     id: i32,
     rustc_version: String,
     docsrs_version: String,
-    build_status: bool,
+    build_status: Option<bool>,
     build_time: DateTime<Utc>,
 }
 
@@ -70,7 +70,11 @@ pub fn build_list_handler(req: &mut Request) -> IronResult<Response> {
             id: row.get("id"),
             rustc_version: row.get("rustc_version"),
             docsrs_version: row.get("cratesfyi_version"),
-            build_status: row.get("build_status"),
+            build_status: match row.get("build_status") {
+                BuildStatus::Success => Some(true),
+                BuildStatus::Failure => Some(false),
+                BuildStatus::InProgress => None,
+            },
             build_time: row.get("build_time"),
         })
         .collect();

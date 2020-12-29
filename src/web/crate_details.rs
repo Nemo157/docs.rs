@@ -1,5 +1,5 @@
 use super::{match_version, redirect_base, render_markdown, MatchSemver, MetaData};
-use crate::{db::Pool, impl_webpage, web::page::WebPage};
+use crate::{db::{Pool, types::BuildStatus}, impl_webpage, web::page::WebPage, error::Result};
 use chrono::{DateTime, Utc};
 use iron::prelude::*;
 use iron::Url;
@@ -11,7 +11,7 @@ use serde_json::Value;
 // TODO: Add target name and versions
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct CrateDetails {
+pub(crate) struct CrateDetails {
     name: String,
     version: String,
     description: Option<String>,
@@ -24,7 +24,7 @@ pub struct CrateDetails {
     #[serde(serialize_with = "optional_markdown")]
     rustdoc: Option<String>, // this is description_long in database
     release_time: DateTime<Utc>,
-    build_status: bool,
+    build_status: BuildStatus,
     last_successful_build: Option<String>,
     rustdoc_status: bool,
     repository_url: Option<String>,
@@ -68,9 +68,9 @@ where
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct Release {
+pub(crate) struct Release {
     pub version: semver::Version,
-    pub build_status: bool,
+    pub build_status: BuildStatus,
     pub yanked: bool,
     pub is_library: bool,
 }
@@ -142,7 +142,8 @@ impl CrateDetails {
             versions
                 .into_iter()
                 .map(|version| map_to_release(conn, crate_id, version))
-                .collect()
+                .collect::<Result<_>>()
+                .unwrap()
         };
 
         let github_metadata = if krate.get::<_, Option<String>>("github_repo").is_some() {
@@ -236,11 +237,11 @@ impl CrateDetails {
             .map(|row| (row.get("login"), row.get("avatar")))
             .collect();
 
-        if !crate_details.build_status {
+        if crate_details.build_status == BuildStatus::Success {
             crate_details.last_successful_build = crate_details
                 .releases
                 .iter()
-                .filter(|release| release.build_status && !release.yanked)
+                .filter(|release| release.build_status == BuildStatus::Success && !release.yanked)
                 .map(|release| release.version.to_string())
                 .next();
         }
@@ -258,32 +259,35 @@ impl CrateDetails {
     }
 }
 
-fn map_to_release(conn: &mut Client, crate_id: i32, version: semver::Version) -> Release {
-    let rows = conn
-        .query(
+fn map_to_release(conn: &mut Client, crate_id: i32, version: semver::Version) -> Result<Release> {
+    let row = conn
+        .query_opt(
             "SELECT build_status,
                     yanked,
                     is_library
              FROM releases
              WHERE releases.crate_id = $1 and releases.version = $2;",
             &[&crate_id, &version.to_string()],
-        )
-        .unwrap();
+        )?;
 
-    let (build_status, yanked, is_library) = rows.get(0).map_or_else(Default::default, |row| {
-        (
-            row.get("build_status"),
-            row.get("yanked"),
-            row.get("is_library"),
-        )
-    });
-
-    Release {
-        version,
-        build_status,
-        yanked,
-        is_library,
-    }
+    Ok(match row {
+        Some(row) => {
+            Release {
+                version,
+                build_status: row.get("build_status"),
+                yanked: row.get("yanked"),
+                is_library: row.get("is_library"),
+            }
+        }
+        None => {
+            Release {
+                version,
+                build_status: BuildStatus::Failure,
+                yanked: false,
+                is_library: false,
+            }
+        }
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -475,49 +479,49 @@ mod tests {
                 vec![
                     Release {
                         version: semver::Version::parse("1.0.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
                         version: semver::Version::parse("0.12.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
                         version: semver::Version::parse("0.3.0")?,
-                        build_status: false,
+                        build_status: BuildStatus::Failure,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
                         version: semver::Version::parse("0.2.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: true,
                         is_library: true,
                     },
                     Release {
                         version: semver::Version::parse("0.2.0-alpha")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
                         version: semver::Version::parse("0.1.1")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
                         version: semver::Version::parse("0.1.0")?,
-                        build_status: true,
+                        build_status: BuildStatus::Success,
                         yanked: false,
                         is_library: true,
                     },
                     Release {
                         version: semver::Version::parse("0.0.1")?,
-                        build_status: false,
+                        build_status: BuildStatus::Failure,
                         yanked: false,
                         is_library: false,
                     },

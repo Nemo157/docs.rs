@@ -523,7 +523,7 @@ pub(crate) struct MetaData {
     pub(crate) description: Option<String>,
     pub(crate) target_name: Option<String>,
     pub(crate) rustdoc_status: bool,
-    pub(crate) default_target: String,
+    pub(crate) default_target: Option<String>,
     pub(crate) doc_targets: Vec<String>,
     pub(crate) yanked: bool,
 }

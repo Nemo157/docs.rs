@@ -1,7 +1,7 @@
 //! rustdoc handler
 
 use crate::{
-    db::Pool,
+    db::{Pool, types::BuildStatus},
     utils,
     web::{
         crate_details::CrateDetails, error::Nope, file::File, match_version,
@@ -312,7 +312,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
 
     // if visiting the full path to the default target, remove the target from the path
     // expects a req_path that looks like `[/:target]/.*`
-    if req_path.get(0).copied() == Some(&krate.metadata.default_target) {
+    if req_path.get(0).copied() == krate.metadata.default_target.as_deref() {
         return redirect(&name, &version, &req_path[1..]);
     }
 
@@ -382,7 +382,7 @@ pub fn rustdoc_html_server_handler(req: &mut Request) -> IronResult<Response> {
         format!("/{}/{}", name, latest_version)
 
     // If the requested version is not the latest, then find the path of the latest version for the `Go to latest` link
-    } else if latest_release.build_status {
+    } else if latest_release.build_status == BuildStatus::Success {
         // Replace the version of the old path with the latest version
         let mut latest_path = req_path.clone();
         latest_path[2] = &latest_version;
@@ -519,7 +519,7 @@ pub fn target_redirect_handler(req: &mut Request) -> IronResult<Response> {
         let mut file_path = req.url.path();
         file_path[0] = "rustdoc";
         file_path.remove(3);
-        if file_path[3] == crate_details.metadata.default_target {
+        if Some(file_path[3]) == crate_details.metadata.default_target.as_deref() {
             file_path.remove(3);
         }
         if let Some(last @ &mut "") = file_path.last_mut() {

@@ -1,7 +1,8 @@
 use crate::db::file::add_path_into_database;
 use crate::db::{
-    add_build_into_database, add_doc_coverage, add_package_into_database,
-    update_crate_data_in_database, Pool,
+    add_build_into_database, add_doc_coverage, add_release_into_database,
+    update_release_in_database, update_build_in_database,
+    update_crate_data_in_database, Pool, types::BuildStatus,
 };
 use crate::docbuilder::{crates::crates_from_path, Limits};
 use crate::error::Result;
@@ -214,7 +215,7 @@ impl RustwideBuilder {
                 let metadata = Metadata::from_crate_root(&build.host_source_dir())?;
 
                 let res = self.execute_build(HOST_TARGET, true, build, &limits, &metadata)?;
-                if !res.result.successful {
+                if !res.successful {
                     failure::bail!("failed to build dummy crate for {}", self.rustc_version);
                 }
 
@@ -335,17 +336,54 @@ impl RustwideBuilder {
                     other_targets,
                 } = metadata.targets(self.config.include_default_targets);
 
+                let cargo_metadata = CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
+
+                // Store the sources for the crate before building it
+                debug!("adding sources into database");
+                let prefix = format!("sources/{}/{}", name, version);
+                let (files_list, algs) =
+                    add_path_into_database(&self.storage, &prefix, build.host_source_dir())?;
+
+                let release_data = match self.index.api().get_release_data(name, version) {
+                    Ok(data) => data,
+                    Err(err) => {
+                        warn!("{:#?}", err);
+                        ReleaseData::default()
+                    }
+                };
+
+                let github_repo = self.get_github_repo(&mut conn, cargo_metadata.root())?;
+
+                let has_examples = build.host_source_dir().join("examples").is_dir();
+
+                let release_id = add_release_into_database(
+                    &mut conn,
+                    cargo_metadata.root(),
+                    &build.host_source_dir(),
+                    files_list,
+                    &release_data,
+                    has_examples,
+                    algs,
+                    github_repo,
+                )?;
+
+                let build_id = add_build_into_database(
+                    &mut conn,
+                    release_id,
+                    &self.rustc_version,
+                    &format!("docsrs {}", crate::BUILD_VERSION),
+                )?;
+
                 // Perform an initial build
                 let res = self.execute_build(default_target, true, &build, &limits, &metadata)?;
-                if res.result.successful {
-                    if let Some(name) = res.cargo_metadata.root().library_name() {
+                if res.successful {
+                    if let Some(name) = cargo_metadata.root().library_name() {
                         let host_target = build.host_target_dir();
                         has_docs = host_target.join("doc").join(name).is_dir();
                     }
                 }
 
-                let mut algs = HashSet::new();
-                if has_docs {
+                let algs = if has_docs {
                     debug!("adding documentation for the default target to the database");
                     self.copy_docs(&build.host_target_dir(), local_storage.path(), "", true)?;
 
@@ -364,59 +402,38 @@ impl RustwideBuilder {
                             &metadata,
                         )?;
                     }
-                    let new_algs = self.upload_docs(name, version, local_storage.path())?;
-                    algs.extend(new_algs);
+                    self.upload_docs(name, version, local_storage.path())?
+                } else {
+                    HashSet::new()
                 };
 
-                // Store the sources even if the build fails
-                debug!("adding sources into database");
-                let prefix = format!("sources/{}/{}", name, version);
-                let (files_list, new_algs) =
-                    add_path_into_database(&self.storage, &prefix, build.host_source_dir())?;
-                algs.extend(new_algs);
-
-                let has_examples = build.host_source_dir().join("examples").is_dir();
-                if res.result.successful {
+                if res.successful {
                     self.metrics.successful_builds.inc();
-                } else if res.cargo_metadata.root().is_library() {
+                } else if cargo_metadata.root().is_library() {
                     self.metrics.failed_builds.inc();
                 } else {
                     self.metrics.non_library_builds.inc();
                 }
 
-                let release_data = match self.index.api().get_release_data(name, version) {
-                    Ok(data) => data,
-                    Err(err) => {
-                        warn!("{:#?}", err);
-                        ReleaseData::default()
-                    }
-                };
+                let build_log_path = format!("build-logs/{}/{}.txt", build_id, default_target);
+                self.storage.store_one(build_log_path, res.build_log)?;
 
-                let cargo_metadata = res.cargo_metadata.root();
-                let github_repo = self.get_github_repo(&mut conn, cargo_metadata)?;
-
-                let release_id = add_package_into_database(
+                let build_status = if res.successful { BuildStatus::Success } else { BuildStatus::Failure };
+                update_build_in_database(&mut conn, build_id, build_status)?;
+                update_release_in_database(
                     &mut conn,
-                    cargo_metadata,
-                    &build.host_source_dir(),
-                    &res.result,
+                    release_id,
+                    build_status,
                     &res.target,
-                    files_list,
                     successful_targets,
-                    &release_data,
                     has_docs,
-                    has_examples,
+                    &self.rustc_version,
                     algs,
-                    github_repo,
                 )?;
 
                 if let Some(doc_coverage) = res.doc_coverage {
                     add_doc_coverage(&mut conn, release_id, doc_coverage)?;
                 }
-
-                let build_id = add_build_into_database(&mut conn, release_id, &res.result)?;
-                let build_log_path = format!("build-logs/{}/{}.txt", build_id, default_target);
-                self.storage.store_one(build_log_path, res.build_log)?;
 
                 // Some crates.io crate data is mutable, so we proactively update it during a release
                 match self.index.api().get_crate_data(name) {
@@ -424,7 +441,7 @@ impl RustwideBuilder {
                     Err(err) => warn!("{:#?}", err),
                 }
 
-                Ok(res.result.successful)
+                Ok(res.successful)
             })?;
 
         build_dir.purge()?;
@@ -443,7 +460,7 @@ impl RustwideBuilder {
         metadata: &Metadata,
     ) -> Result<()> {
         let target_res = self.execute_build(target, false, build, limits, metadata)?;
-        if target_res.result.successful {
+        if target_res.successful {
             // Cargo is not giving any error and not generating documentation of some crates
             // when we use a target compile options. Check documentation exists before
             // adding target to successfully_targets.
@@ -519,9 +536,6 @@ impl RustwideBuilder {
         limits: &Limits,
         metadata: &Metadata,
     ) -> Result<FullBuildResult> {
-        let cargo_metadata =
-            CargoMetadata::load(&self.workspace, &self.toolchain, &build.host_source_dir())?;
-
         let mut rustdoc_flags = Vec::new();
 
         rustdoc_flags.extend(vec![
@@ -557,13 +571,8 @@ impl RustwideBuilder {
         }
 
         Ok(FullBuildResult {
-            result: BuildResult {
-                rustc_version: self.rustc_version.clone(),
-                docsrs_version: format!("docsrs {}", crate::BUILD_VERSION),
-                successful,
-            },
+            successful,
             doc_coverage,
-            cargo_metadata,
             build_log: storage.to_string(),
             target: target.to_string(),
         })
@@ -665,7 +674,7 @@ impl RustwideBuilder {
                     "SELECT 1 FROM crates, releases, builds
                      WHERE crates.id = releases.crate_id AND releases.id = builds.rid
                        AND crates.name = $1 AND releases.version = $2
-                       AND builds.build_status = TRUE;",
+                       AND builds.build_status = 'success';",
                     &[&name, &version],
                 )?
                 .is_empty())
@@ -704,9 +713,8 @@ impl RustwideBuilder {
 }
 
 struct FullBuildResult {
-    result: BuildResult,
+    successful: bool,
     target: String,
-    cargo_metadata: CargoMetadata,
     doc_coverage: Option<DocCoverage>,
     build_log: String,
 }
@@ -723,10 +731,4 @@ pub(crate) struct DocCoverage {
     pub(crate) total_items_needing_examples: i32,
     /// The items of the crate that have a code example, used to calculate documentation coverage.
     pub(crate) items_with_examples: i32,
-}
-
-pub(crate) struct BuildResult {
-    pub(crate) rustc_version: String,
-    pub(crate) docsrs_version: String,
-    pub(crate) successful: bool,
 }

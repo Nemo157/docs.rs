@@ -602,6 +602,50 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> CratesfyiResult<(
                     ALTER release_time TYPE timestamp USING release_time AT TIME ZONE 'UTC';
             ",
         ),
+        migration!(
+            context,
+            26,
+            "update build_status to be multi-stage",
+            // upgrade
+            "
+                CREATE TYPE build_status AS ENUM (
+                    'in_progress',
+                    'success',
+                    'failure'
+                );
+                ALTER TABLE releases ALTER doc_rustc_version DROP NOT NULL;
+                ALTER TABLE releases ALTER default_target DROP NOT NULL;
+                ALTER TABLE releases ALTER build_status DROP DEFAULT;
+                ALTER TABLE releases ALTER build_status
+                    TYPE build_status
+                    USING CASE WHEN build_status
+                        THEN 'success'::build_status
+                        ELSE 'failure'::build_status
+                    END;
+                ALTER TABLE builds ALTER build_status
+                    TYPE build_status
+                    USING CASE WHEN build_status
+                        THEN 'success'::build_status
+                        ELSE 'failure'::build_status
+                    END;
+            ",
+            // downgrade
+            "
+                LOCK builds, releases;
+                DELETE FROM builds WHERE build_status = 'in_progress';
+                DELETE FROM releases WHERE build_status = 'in_progress';
+                ALTER TABLE builds ALTER build_status
+                    TYPE BOOL
+                    USING build_status = 'success';
+                ALTER TABLE releases ALTER build_status
+                    TYPE BOOL
+                    DEFAULT false
+                    USING build_status = 'success';
+                ALTER TABLE releases ALTER default_target SET NOT NULL;
+                ALTER TABLE releases ALTER doc_rustc_version SET NOT NULL;
+                DROP TYPE build_status;
+            ",
+        ),
     ];
 
     for migration in migrations {

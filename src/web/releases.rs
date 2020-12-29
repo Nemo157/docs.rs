@@ -87,7 +87,7 @@ pub(crate) fn get_releases(conn: &mut Client, page: i64, limit: i64, order: Orde
         INNER JOIN releases ON crates.id = releases.crate_id
         LEFT JOIN github_repos ON releases.github_repo = github_repos.id
         WHERE
-            ((NOT $3) OR (releases.build_status = FALSE AND releases.is_library = TRUE))
+            ((NOT $3) OR (releases.build_status != 'success' AND releases.is_library = TRUE))
             AND crates.latest_version_id = releases.id
         ORDER BY {} DESC NULLS LAST
         LIMIT $1 OFFSET $2",

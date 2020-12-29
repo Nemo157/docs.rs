@@ -4,7 +4,7 @@ use std::result::Result as StdResult;
 
 pub(crate) use failure::Error;
 
-pub type Result<T> = StdResult<T, Error>;
+pub type Result<T, E = Error> = StdResult<T, E>;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct SizeLimitReached;
