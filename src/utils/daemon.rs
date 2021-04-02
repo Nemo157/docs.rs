@@ -64,6 +64,7 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
     }
 
     // build new crates every minute
+    let runtime = context.runtime()?;
     let pool = context.pool()?;
     let build_queue = context.build_queue()?;
     let cloned_config = config.clone();
@@ -73,7 +74,7 @@ pub fn start_daemon(context: &dyn Context, enable_registry_watcher: bool) -> Res
         .spawn(move || {
             let doc_builder =
                 DocBuilder::new(cloned_config.clone(), pool.clone(), build_queue.clone());
-            queue_builder(doc_builder, rustwide_builder, build_queue).unwrap();
+            queue_builder(runtime.clone(), doc_builder, rustwide_builder, build_queue).unwrap();
         })
         .unwrap();
 

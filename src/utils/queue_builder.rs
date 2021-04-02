@@ -8,6 +8,7 @@ use std::time::Duration;
 
 // TODO: change to `fn() -> Result<!, Error>` when never _finally_ stabilizes
 pub fn queue_builder(
+    runtime: tokio::runtime::Handle,
     mut doc_builder: DocBuilder,
     mut builder: RustwideBuilder,
     build_queue: Arc<BuildQueue>,
@@ -44,7 +45,7 @@ pub fn queue_builder(
             debug!("10 builds in a row; pinging pubsubhubhub");
             status = BuilderState::QueueInProgress(0);
 
-            match pubsubhubbub::ping_hubs() {
+            match runtime.block_on(pubsubhubbub::ping_hubs()) {
                 Err(e) => error!("Failed to ping hub: {}", e),
                 Ok(n) => debug!("Succesfully pinged {} hubs", n),
             }
@@ -61,7 +62,7 @@ pub fn queue_builder(
             Ok(0) => {
                 if status.count() > 0 {
                     // ping the hubs before continuing
-                    match pubsubhubbub::ping_hubs() {
+                    match runtime.block_on(pubsubhubbub::ping_hubs()) {
                         Err(e) => error!("Failed to ping hub: {}", e),
                         Ok(n) => debug!("Succesfully pinged {} hubs", n),
                     }

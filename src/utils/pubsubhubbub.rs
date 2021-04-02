@@ -1,27 +1,20 @@
-use reqwest::{
-    blocking::{Client, Response},
-    Result,
-};
-use std::collections::HashMap;
+use reqwest::{Client, Response, Result};
 
-fn ping_hub(url: &str) -> Result<Response> {
-    let mut params = HashMap::with_capacity(2);
-    params.insert("hub.mode", "publish");
-    params.insert("hub.url", "https://docs.rs/releases/feed");
+async fn ping_hub(url: &str) -> Result<Response> {
+    let params = [
+        ("hub.mode", "publish"),
+        ("hub.url", "https://docs.rs/releases/feed"),
+    ];
 
-    let client = Client::new();
-    client.post(url).form(&params).send()
+    Client::new().post(url).form(&params).send().await
 }
 
 /// Ping the two predefined hubs. Return either the number of successfully
 /// pinged hubs, or the first error.
-pub fn ping_hubs() -> Result<usize> {
-    vec![
-        "https://pubsubhubbub.appspot.com",
-        "https://pubsubhubbub.superfeedr.com",
-    ]
-    .into_iter()
-    .map(ping_hub)
-    .collect::<Result<Vec<_>>>()
-    .map(|v| v.len())
+pub async fn ping_hubs() -> Result<usize> {
+    tokio::try_join![
+        ping_hub("https://pubsubhubbub.appspot.com"),
+        ping_hub("https://pubsubhubbub.superfeedr.com"),
+    ]?;
+    Ok(2)
 }
