@@ -42,7 +42,11 @@ fn load_config(repo: &git2::Repository) -> Result<IndexConfig> {
 }
 
 impl Index {
-    pub fn from_url(path: PathBuf, repository_url: String) -> Result<Self> {
+    pub fn from_url(
+        runtime: tokio::runtime::Handle,
+        path: PathBuf,
+        repository_url: String,
+    ) -> Result<Self> {
         let url = repository_url.clone();
         let diff = crates_index_diff::Index::from_path_or_cloned_with_options(
             &path,
@@ -51,7 +55,7 @@ impl Index {
         .context("initialising registry index repository")?;
 
         let config = load_config(diff.repository()).context("loading registry config")?;
-        let api = Api::new(config.api).context("initialising registry api client")?;
+        let api = Api::new(runtime, config.api).context("initialising registry api client")?;
         Ok(Self {
             path,
             api,
@@ -59,13 +63,13 @@ impl Index {
         })
     }
 
-    pub fn new(path: PathBuf) -> Result<Self> {
+    pub fn new(runtime: tokio::runtime::Handle, path: PathBuf) -> Result<Self> {
         // This initializes the repository, then closes it afterwards to avoid leaking file descriptors.
         // See https://github.com/rust-lang/docs.rs/pull/847
         let diff = crates_index_diff::Index::from_path_or_cloned(&path)
             .context("initialising registry index repository")?;
         let config = load_config(diff.repository()).context("loading registry config")?;
-        let api = Api::new(config.api).context("initialising registry api client")?;
+        let api = Api::new(runtime, config.api).context("initialising registry api client")?;
         Ok(Self {
             path,
             api,

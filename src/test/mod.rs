@@ -211,7 +211,7 @@ impl TestEnvironment {
         self.index
             .get_or_init(|| {
                 Arc::new(
-                    Index::new(self.config().registry_index_path.clone())
+                    Index::new(self.runtime(), self.config().registry_index_path.clone())
                         .expect("failed to initialize the index"),
                 )
             })

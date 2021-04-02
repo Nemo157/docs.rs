@@ -16,7 +16,8 @@ const APP_USER_AGENT: &str = concat!(
 #[derive(Debug)]
 pub struct Api {
     api_base: Option<Url>,
-    client: reqwest::blocking::Client,
+    runtime: tokio::runtime::Handle,
+    client: reqwest::Client,
 }
 
 #[derive(Debug)]
@@ -50,7 +51,7 @@ pub struct CrateOwner {
 }
 
 impl Api {
-    pub(super) fn new(api_base: Option<Url>) -> Result<Self> {
+    pub(super) fn new(runtime: tokio::runtime::Handle, api_base: Option<Url>) -> Result<Self> {
         let headers = vec![
             (USER_AGENT, HeaderValue::from_static(APP_USER_AGENT)),
             (ACCEPT, HeaderValue::from_static("application/json")),
@@ -58,11 +59,15 @@ impl Api {
         .into_iter()
         .collect();
 
-        let client = reqwest::blocking::Client::builder()
+        let client = reqwest::Client::builder()
             .default_headers(headers)
             .build()?;
 
-        Ok(Self { api_base, client })
+        Ok(Self {
+            runtime,
+            api_base,
+            client,
+        })
     }
 
     fn api_base(&self) -> Result<Url> {
@@ -88,6 +93,19 @@ impl Api {
             release_time,
             yanked,
             downloads,
+        })
+    }
+
+    fn blocking_get<T: serde::de::DeserializeOwned>(&self, url: impl Into<Url>) -> Result<T> {
+        self.runtime.block_on(async move {
+            Ok(self
+                .client
+                .get(url.into())
+                .send()
+                .await?
+                .error_for_status()?
+                .json()
+                .await?)
         })
     }
 
@@ -121,7 +139,7 @@ impl Api {
             downloads: i32,
         }
 
-        let response: Response = self.client.get(url).send()?.error_for_status()?.json()?;
+        let response: Response = self.blocking_get(url)?;
 
         let version = Version::parse(version)?;
         let version = response
@@ -160,7 +178,7 @@ impl Api {
             name: Option<String>,
         }
 
-        let response: Response = self.client.get(url).send()?.error_for_status()?.json()?;
+        let response: Response = self.blocking_get(url)?;
 
         let result = response
             .users

@@ -613,9 +613,13 @@ impl Context for BinContext {
                 let config = self.config()?;
                 Ok(Arc::new(
                     if let Some(registry_url) = config.registry_url.clone() {
-                        Index::from_url(config.registry_index_path.clone(), registry_url)
+                        Index::from_url(
+                            self.runtime()?,
+                            config.registry_index_path.clone(),
+                            registry_url,
+                        )
                     } else {
-                        Index::new(config.registry_index_path.clone())
+                        Index::new(self.runtime()?, config.registry_index_path.clone())
                     }?,
                 ))
             })?
