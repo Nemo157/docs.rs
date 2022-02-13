@@ -11,6 +11,7 @@ use crate::web::metrics::RenderingTimesRecorder;
 use crate::{db::Pool, Config, Metrics};
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
+use log::debug;
 use path_slash::PathExt;
 use std::{
     collections::{HashMap, HashSet},
@@ -306,6 +307,7 @@ impl Storage {
         archive_path: &str,
         root_dir: &Path,
     ) -> Result<(HashMap<PathBuf, String>, CompressionAlgorithm)> {
+        let root_dir = root_dir.to_owned();
         let mut file_paths = HashMap::new();
 
         // We are only using the `zip` library to create the archives and the matching
@@ -322,25 +324,84 @@ impl Storage {
         let options =
             zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Bzip2);
 
+        let zip_timer = std::time::Instant::now();
+        let timer = std::time::Instant::now();
+        let file_list = get_file_list(&root_dir)?;
+        debug!("got file list in {:?}", timer.elapsed());
+
+        let timer = std::time::Instant::now();
         let mut zip = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
-        for file_path in get_file_list(root_dir)? {
-            let mut file = fs::File::open(root_dir.join(&file_path))?;
 
-            zip.start_file(file_path.to_str().unwrap(), options)?;
-            io::copy(&mut file, &mut zip)?;
-
-            let mime = detect_mime(&file_path);
-            file_paths.insert(file_path, mime.to_string());
+        enum Msg {
+            StartFile { path: String },
+            Data { buffer: Vec<u8> },
+            Mime { path: PathBuf, mime: &'static str },
         }
+        let (io_tx, zip_rx) = crossbeam::channel::unbounded();
+        let (zip_tx, io_rx) = crossbeam::channel::unbounded();
+        for _ in 0..50 {
+            zip_tx.send(Vec::with_capacity(8 * 1024 * 1024))?;
+        }
+        let handle = std::thread::spawn(move || {
+            use std::io::Read;
+            let mut buffer = io_rx.recv()?;
+            for path in file_list {
+                let mut file = std::fs::File::open(root_dir.join(&path))?;
+                let mime = detect_mime(&path);
+                io_tx.send(Msg::StartFile {
+                    path: path.to_str().unwrap().to_owned(),
+                })?;
+                loop {
+                    buffer.clear();
+                    use std::convert::TryFrom; // TODO: edition 2021
+                    let n = Read::by_ref(&mut file)
+                        .take(u64::try_from(buffer.capacity()).unwrap())
+                        .read_to_end(&mut buffer)?;
+                    if n == 0 {
+                        break;
+                    }
+                    io_tx.send(Msg::Data { buffer })?;
+                    buffer = io_rx.recv()?;
+                }
+                io_tx.send(Msg::Mime { path, mime })?;
+            }
+            Result::<_, anyhow::Error>::Ok(())
+        });
+        for msg in zip_rx {
+            match msg {
+                Msg::StartFile { path } => {
+                    zip.start_file(path, options)?;
+                }
+                Msg::Data { buffer } => {
+                    zip.write_all(buffer.as_ref())?;
+                    // Ignore errors sending, that means the reading thread has completed
+                    let _ = zip_tx.send(buffer);
+                }
+                Msg::Mime { path, mime } => {
+                    file_paths.insert(path, mime.to_owned());
+                }
+            }
+        }
+        handle.join().unwrap()?;
+        debug!(
+            "added {} files into archive in {:?}",
+            file_paths.len(),
+            timer.elapsed()
+        );
 
         let mut zip_content = zip.finish()?.into_inner();
+        debug!("created zip in {:?}", zip_timer.elapsed());
+
+        let timer = std::time::Instant::now();
         let mut index_content = vec![];
         archive_index::create(&mut io::Cursor::new(&mut zip_content), &mut index_content)?;
         let alg = CompressionAlgorithm::default();
         let compressed_index_content = compress(&index_content[..], alg)?;
+        debug!("created index in {:?}", timer.elapsed());
 
         let remote_index_path = format!("{}.index", &archive_path);
 
+        let timer = std::time::Instant::now();
         // additionally store the index in the local cache, so it's directly available
         let local_index_path = self
             .config
@@ -352,7 +413,9 @@ impl Storage {
         fs::create_dir_all(local_index_path.parent().unwrap())?;
         let mut local_index_file = fs::File::create(&local_index_path)?;
         local_index_file.write_all(&index_content)?;
+        debug!("wrote local index in {:?}", timer.elapsed());
 
+        let timer = std::time::Instant::now();
         self.store_inner(
             vec![
                 Blob {
@@ -373,6 +436,7 @@ impl Storage {
             .into_iter()
             .map(Ok),
         )?;
+        debug!("wrote remote archive and index in {:?}", timer.elapsed());
 
         let file_alg = CompressionAlgorithm::Bzip2;
         Ok((file_paths, file_alg))

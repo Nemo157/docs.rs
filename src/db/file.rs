@@ -10,6 +10,7 @@
 use crate::error::Result;
 use crate::storage::{CompressionAlgorithm, CompressionAlgorithms, Storage};
 
+use log::debug;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -39,7 +40,9 @@ pub fn add_path_into_remote_archive<P: AsRef<Path>>(
     archive_path: &str,
     path: P,
 ) -> Result<(Value, CompressionAlgorithm)> {
-    let (file_list, algorithm) = storage.store_all_in_archive(archive_path, path.as_ref())?;
+    let path = path.as_ref();
+    debug!("adding files from {} into remote archive {archive_path}", path.display());
+    let (file_list, algorithm) = storage.store_all_in_archive(archive_path, path)?;
     Ok((
         file_list_to_json(file_list.into_iter().collect()),
         algorithm,
