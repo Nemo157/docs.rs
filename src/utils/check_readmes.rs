@@ -5,13 +5,13 @@ use std::time::{Instant, Duration};
 pub fn check_readmes(ctx: &dyn Context) -> anyhow::Result<()> {
     let mut conn = ctx.pool()?.get()?;
 
-    let total: i64 = conn.query_one("select count(*) from releases inner join crates on releases.crate_id = crates.id where readme is not null", &[])?.get("count");
+    let total: i64 = conn.query_one("select count(*) from releases inner join crates on releases.crate_id = crates.id where readme is not null and crates.name <> 'weakjson'", &[])?.get("count");
 
     let query = "
         select crates.name, releases.version, releases.readme
         from releases
         inner join crates on releases.crate_id = crates.id
-        where releases.readme is not null
+        where releases.readme is not null and crates.name <> 'weakjson'
     ";
 
     let mut count: u32 = 0;
