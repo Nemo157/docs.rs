@@ -130,6 +130,8 @@ enum CommandLine {
         #[command(subcommand)]
         subcommand: QueueSubcommand,
     },
+
+    CheckReadmes,
 }
 
 impl CommandLine {
@@ -164,6 +166,7 @@ impl CommandLine {
             }
             Self::Database { subcommand } => subcommand.handle_args(ctx)?,
             Self::Queue { subcommand } => subcommand.handle_args(ctx)?,
+            Self::CheckReadmes => docs_rs::utils::check_readmes(&ctx)?,
         }
 
         Ok(())
