@@ -896,6 +896,23 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
             "ALTER TYPE feature DROP ATTRIBUTE optional_dependency;",
             "ALTER TYPE feature ADD ATTRIBUTE optional_dependency BOOL;"
         ),
+        sql_migration!(
+            context,
+            39,
+            "Remove build_status from releases",
+            "ALTER TABLE releases DROP COLUMN build_status;",
+            "
+            ALTER TABLE releases ADD COLUMN build_status BOOL;
+            UPDATE releases SET build_status = (
+                SELECT builds.build_status
+                FROM builds
+                WHERE builds.rid = releases.id
+                ORDER BY builds.build_time DESC
+                LIMIT 1
+            );
+            ",
+
+        ),
     ];
 
     for migration in migrations {
