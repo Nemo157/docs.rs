@@ -548,7 +548,6 @@ impl RustwideBuilder {
                         &mut conn,
                         cargo_metadata,
                         &build.host_source_dir(),
-                        &res.result,
                         &res.target,
                         files_list,
                         successful_targets,

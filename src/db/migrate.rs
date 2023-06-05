@@ -911,6 +911,23 @@ pub fn migrate(version: Option<Version>, conn: &mut Client) -> crate::error::Res
                 LIMIT 1
             );
             ",
+        ),
+        sql_migration!(
+            context,
+            40,
+            "Remove doc_rustc_version from releases",
+            "ALTER TABLE releases DROP COLUMN doc_rustc_version;",
+            "
+            ALTER TABLE releases ADD COLUMN doc_rustc_version VARCHAR(100);
+            UPDATE releases SET doc_rustc_version = (
+                SELECT builds.rustc_version
+                FROM builds
+                WHERE builds.rid = releases.id
+                ORDER BY builds.build_time DESC
+                LIMIT 1
+            );
+            ALTER TABLE releases ALTER COLUMN doc_rustc_version SET NOT NULL;
+            ",
 
         ),
     ];

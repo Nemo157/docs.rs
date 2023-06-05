@@ -432,7 +432,6 @@ impl<'a> FakeRelease<'a> {
             &mut db.conn(),
             &package,
             crate_dir,
-            last_build_result,
             default_target,
             source_meta,
             self.doc_targets,
