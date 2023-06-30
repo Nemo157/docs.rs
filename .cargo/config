@@ -1,3 +1,6 @@
+[unstable]
+bindeps = true
+
 [profile.debug]
 # rustc spends an inordinate amount of time on LLVM
 rustflags = ["-C", "no-prepopulate-passes"]

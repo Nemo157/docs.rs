@@ -19,18 +19,19 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 # Install the stable toolchain with rustup
 RUN curl https://sh.rustup.rs >/tmp/rustup-init && \
     chmod +x /tmp/rustup-init && \
-    /tmp/rustup-init -y --no-modify-path --default-toolchain stable --profile minimal
+    /tmp/rustup-init -y --no-modify-path --default-toolchain nightly --profile minimal
 ENV PATH=/root/.cargo/bin:$PATH
+RUN rustup target add wasm32-unknown-unknown
 
 # Build the dependencies in a separate step to avoid rebuilding all of them
 # every time the source code changes. This takes advantage of Docker's layer
 # caching, and it works by copying the Cargo.{toml,lock} with dummy source code
 # and doing a full build with it.
 WORKDIR /build
+COPY .cargo .cargo
 COPY benches benches
 COPY Cargo.lock Cargo.toml ./
-COPY crates/metadata crates/metadata/
-COPY crates/font-awesome-as-a-crate crates/font-awesome-as-a-crate
+COPY crates crates
 RUN mkdir -p src/bin && \
     echo "fn main() {}" > src/bin/cratesfyi.rs && \
     echo "fn main() {}" > build.rs
@@ -50,7 +51,6 @@ COPY src src/
 RUN find src -name "*.rs" -exec touch {} \;
 COPY templates/style templates/style
 COPY vendor vendor/
-COPY assets assets/
 
 RUN cargo build --release
 
