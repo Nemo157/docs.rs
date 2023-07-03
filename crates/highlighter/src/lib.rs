@@ -50,7 +50,6 @@ pub unsafe extern "C" fn highlight(lang: StrPtr, code: StrPtr) -> StrPtr {
     let code = unsafe { ptr_to_str(code).unwrap_unchecked() };
     match highlight::try_with_lang(lang.as_deref(), &code) {
         Ok(s) => unsafe { str_to_ptr(s.into_boxed_str()) },
-        Err(e) if e.is::<highlight::LimitsExceeded>() => StrPtr(1),
         Err(_) => StrPtr(0),
     }
 }

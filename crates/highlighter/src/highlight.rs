@@ -6,13 +6,6 @@ use syntect::{
     util::LinesWithEndings,
 };
 
-const TOTAL_CODE_BYTE_LENGTH_LIMIT: usize = 5 * 1024 * 1024;
-const PER_LINE_BYTE_LENGTH_LIMIT: usize = 512;
-
-#[derive(Debug, thiserror::Error)]
-#[error("the code exceeded a highlighting limit")]
-pub struct LimitsExceeded;
-
 static SYNTAXES: Lazy<SyntaxSet> = Lazy::new(|| {
     static SYNTAX_DATA: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/syntect.packdump"));
 
@@ -20,10 +13,6 @@ static SYNTAXES: Lazy<SyntaxSet> = Lazy::new(|| {
 });
 
 fn try_with_syntax(syntax: &SyntaxReference, code: &str) -> Result<String> {
-    if code.len() > TOTAL_CODE_BYTE_LENGTH_LIMIT {
-        return Err(LimitsExceeded.into());
-    }
-
     let mut html_generator = ClassedHTMLGenerator::new_with_class_style(
         syntax,
         &SYNTAXES,
@@ -31,9 +20,6 @@ fn try_with_syntax(syntax: &SyntaxReference, code: &str) -> Result<String> {
     );
 
     for line in LinesWithEndings::from(code) {
-        if line.len() > PER_LINE_BYTE_LENGTH_LIMIT {
-            return Err(LimitsExceeded.into());
-        }
         html_generator.parse_html_for_line_which_includes_newline(line)?;
     }
 
@@ -57,10 +43,7 @@ pub(crate) fn try_with_lang(lang: Option<&str>, code: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        select_syntax, try_with_lang, LimitsExceeded, PER_LINE_BYTE_LENGTH_LIMIT,
-        TOTAL_CODE_BYTE_LENGTH_LIMIT,
-    };
+    use super::{try_with_lang, select_syntax};
 
     #[test]
     fn custom_filetypes() {
@@ -78,13 +61,10 @@ mod tests {
     }
 
     #[test]
-    fn limits() {
-        let is_limited = |s: String| {
-            try_with_lang(Some("toml"), &s)
-                .unwrap_err()
-                .is::<LimitsExceeded>()
-        };
-        assert!(is_limited("a\n".repeat(TOTAL_CODE_BYTE_LENGTH_LIMIT)));
-        assert!(is_limited("aa".repeat(PER_LINE_BYTE_LENGTH_LIMIT)));
+    fn smoke() {
+        assert_eq!(
+            try_with_lang(Some("toml"), "[a]").unwrap(),
+            r#"<span class="syntax-source syntax-toml"><span class="syntax-punctuation syntax-definition syntax-table syntax-begin syntax-toml">[</span><span class="syntax-meta syntax-tag syntax-table syntax-toml"><span class="syntax-entity syntax-name syntax-table syntax-toml">a</span></span><span class="syntax-punctuation syntax-definition syntax-table syntax-end syntax-toml">]</span></span>"#,
+        );
     }
 }

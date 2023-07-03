@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 use std::cell::RefCell;
 use wasmtime::{Config, Engine, Instance, Module, Store, Trap};
 
-const TOTAL_CODE_BYTE_LENGTH_LIMIT: usize = 5 * 1024 * 1024;
+const TOTAL_CODE_BYTE_LENGTH_LIMIT: usize = 10 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error)]
 #[error("timed out while highlighting")]
@@ -80,11 +80,7 @@ pub fn try_with_lang(lang: Option<&str>, code: &str) -> Result<String> {
                     usize::try_from(ptr_len & u64::from(u32::MAX))?,
                 );
                 if ptr == 0 {
-                    if len == 1 {
-                        bail!(LimitsExceeded)
-                    } else {
-                        bail!(HighlighterFailed)
-                    }
+                    bail!(HighlighterFailed)
                 } else {
                     let mut buffer = vec![0; len];
                     memory.read(&*store, ptr, &mut buffer)?;
@@ -143,8 +139,6 @@ pub fn with_lang(lang: Option<&str>, code: &str) -> String {
 mod tests {
     use super::{try_with_lang, with_lang, LimitsExceeded, Timeout, TOTAL_CODE_BYTE_LENGTH_LIMIT};
 
-    const PER_LINE_BYTE_LENGTH_LIMIT: usize = 512;
-
     #[test]
     fn smoke() {
         assert_eq!(
@@ -178,7 +172,6 @@ mod tests {
                 .is::<LimitsExceeded>()
         };
         assert!(is_limited("a\n".repeat(TOTAL_CODE_BYTE_LENGTH_LIMIT)));
-        assert!(is_limited("aa".repeat(PER_LINE_BYTE_LENGTH_LIMIT)));
     }
 
     #[test]
