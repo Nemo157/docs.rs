@@ -31,6 +31,32 @@ services:
             timeout: 5s
             retries: 10
 
+    builder:
+        build:
+            context: .
+            dockerfile: ./dockerfiles/Dockerfile
+        depends_on:
+            - db
+            - s3
+        ports:
+            - "3000:3000"
+        volumes:
+            - "/var/run/docker.sock:/var/run/docker.sock"
+            - ".rustwide-docker:/opt/docsrs/rustwide"
+            - "cratesio-index:/opt/docsrs/prefix/crates.io-index"
+        environment:
+            DOCSRS_RUSTWIDE_WORKSPACE: /opt/docsrs/rustwide
+            DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@db
+            DOCSRS_STORAGE_BACKEND: s3
+            S3_ENDPOINT: http://s3:9000
+            AWS_ACCESS_KEY_ID: cratesfyi
+            AWS_SECRET_ACCESS_KEY: secret_key
+        env_file:
+            - .env
+        command: start-build-server
+        deploy:
+          replicas: 3
+
     db:
         build:
             context: ./dockerfiles
