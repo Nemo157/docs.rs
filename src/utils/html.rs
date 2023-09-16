@@ -103,7 +103,7 @@ pub(crate) fn rewrite_lol(
     writer.write(html)?;
     writer.end()?;
 
-    Ok(buffer)
+    Ok(minify_html::minify(&buffer, &minify_html::Cfg::spec_compliant()))
 }
 
 #[cfg(test)]

@@ -158,7 +158,7 @@ fn render_response(
             };
 
             let rendered = match rendered {
-                Ok(content) => content,
+                Ok(content) => minify_html::minify(content.as_bytes(), &minify_html::Cfg::spec_compliant()),
                 Err(err) => {
                     if response.status().is_server_error() {
                         // avoid infinite loop if error.html somehow fails to load
