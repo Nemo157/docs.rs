@@ -751,6 +751,7 @@ mod tests {
     use crate::registry_api::CrateOwner;
     use crate::test::{
         assert_redirect, assert_redirect_unchecked, assert_success, wrapper, TestFrontend,
+        async_wrapper, TestEnvironment
     };
     use anyhow::Error;
     use chrono::{Duration, TimeZone};
@@ -763,7 +764,7 @@ mod tests {
 
     #[test]
     fn get_releases_by_stars() {
-        wrapper(|env| {
+        async fn get_releases_by_stars(env: &TestEnvironment) -> Result<()> {
             let db = env.db();
 
             env.fake_release()
@@ -779,12 +780,7 @@ mod tests {
             // release without stars will not be shown
             env.fake_release().name("baz").version("1.0.0").create()?;
 
-            let releases = env
-                .runtime()
-                .block_on(async move {
-                    get_releases(&mut *db.async_conn().await, 1, 10, Order::GithubStars, true).await
-                })
-                .unwrap();
+            let releases = get_releases(&mut *db.async_conn().await, 1, 10, Order::GithubStars, true).await.unwrap();
             assert_eq!(
                 vec![
                     "bar", // 20 stars
@@ -797,7 +793,8 @@ mod tests {
             );
 
             Ok(())
-        })
+        }
+        async_wrapper(get_releases_by_stars)
     }
 
     #[test]

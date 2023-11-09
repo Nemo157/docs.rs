@@ -25,10 +25,30 @@ use std::{
     str::FromStr,
     sync::Arc,
     time::Duration,
+    future::Future,
 };
 use tokio::runtime::{Builder, Runtime};
 use tokio::sync::oneshot::Sender;
 use tracing::{debug, error, instrument, trace};
+use futures_util::future::FutureExt;
+
+pub(crate) trait FnLt<'a, In: 'a> {
+    type Output;
+    type Future: Future<Output = Self::Output> + 'a;
+    fn apply(self, input: In) -> Self::Future;
+}
+
+impl<'a, T, In: 'a, Out, Fut> FnLt<'a, In> for T
+where
+    T: FnOnce(In) -> Fut,
+    Fut: Future<Output = Out> + 'a,
+{
+    type Output = Out;
+    type Future = Fut;
+    fn apply(self, input: In) -> Self::Future {
+        (self)(input)
+    }
+}
 
 #[track_caller]
 pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
@@ -51,6 +71,31 @@ pub(crate) fn wrapper(f: impl FnOnce(&TestEnvironment) -> Result<()>) {
 
         panic!("the test failed");
     }
+}
+
+pub(crate) fn async_wrapper(f: impl for<'a> FnLt<'a, &'a TestEnvironment, Output = Result<()>>) {
+    let env = TestEnvironment::new();
+    let runtime = env.runtime();
+    runtime.block_on(async move {
+        // if we didn't catch the panic, the server would hang forever
+        let maybe_panic = panic::AssertUnwindSafe(f.apply(&env)).catch_unwind().await;
+        env.cleanup();
+        let result = match maybe_panic {
+            Ok(r) => r,
+            Err(payload) => panic::resume_unwind(payload),
+        };
+
+        if let Err(err) = result {
+            eprintln!("the test failed: {err}");
+            for cause in err.chain() {
+                eprintln!("  caused by: {cause}");
+            }
+
+            eprintln!("{}", err.backtrace());
+
+            panic!("the test failed");
+        }
+    });
 }
 
 /// check a request if the cache control header matches NoCache
