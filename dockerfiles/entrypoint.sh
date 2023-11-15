@@ -7,32 +7,34 @@ export DOCSRS_DOCKER=true
 export DOCSRS_LOG=${DOCSRS_LOG-"docs-rs,rustwide=info"}
 export PATH="$PATH:/build/target/release"
 
-# Try migrating the database multiple times if it fails
-# This avoids the docker container crashing the first time it's started with
-# docker-compose, as PostgreSQL needs some time to initialize.
-set +e
-failed=0
-while true; do
-    if ! cratesfyi database migrate; then
-        ((failed=failed + 1))
-        if [ "${failed}" -eq 5 ]; then
-            exit 1
-        fi
-        echo "failed to migrate the database"
-        echo "waiting 1 second..."
-        sleep 1
-    else
-        break
-    fi
-done
-set -e
+if ! [ -n "$DOCSRS_DOCKER_SKIP_INIT" ]; then
+  # Try migrating the database multiple times if it fails
+  # This avoids the docker container crashing the first time it's started with
+  # docker-compose, as PostgreSQL needs some time to initialize.
+  set +e
+  failed=0
+  while true; do
+      if ! cratesfyi database migrate; then
+          ((failed=failed + 1))
+          if [ "${failed}" -eq 5 ]; then
+              exit 1
+          fi
+          echo "failed to migrate the database"
+          echo "waiting 1 second..."
+          sleep 1
+      else
+          break
+      fi
+  done
+  set -e
 
-if ! [ -d "${DOCSRS_PREFIX}/crates.io-index/.git" ]; then
-    git clone ${REGISTRY_URL:-https://github.com/rust-lang/crates.io-index} "${DOCSRS_PREFIX}/crates.io-index"
-    # Prevent new crates built before the container creation to be built
-    git --git-dir="$DOCSRS_PREFIX/crates.io-index/.git" branch crates-index-diff_last-seen
+  if ! [ -d "${DOCSRS_PREFIX}/crates.io-index/.git" ]; then
+      git clone ${REGISTRY_URL:-https://github.com/rust-lang/crates.io-index} "${DOCSRS_PREFIX}/crates.io-index"
+      # Prevent new crates built before the container creation to be built
+      git --git-dir="$DOCSRS_PREFIX/crates.io-index/.git" branch crates-index-diff_last-seen
+  fi
+
+  cratesfyi build update-toolchain --only-first-time
 fi
-
-cratesfyi build update-toolchain --only-first-time
 
 cratesfyi "$@"

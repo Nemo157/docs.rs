@@ -90,13 +90,43 @@ services:
             timeout: 5s
             retries: 10
 
-    gui_tests:
+    gui-tests-web:
+        build:
+            context: .
+            dockerfile: ./dockerfiles/Dockerfile
+        platform: "linux/amd64"
+        depends_on:
+            - db
+            - s3
+        volumes:
+            - "/var/run/docker.sock:/var/run/docker.sock"
+            - "./ignored/rustwide-gui-tests-docker:/opt/docsrs/rustwide"
+            - "cratesio-index:/opt/docsrs/prefix/crates.io-index"
+        environment:
+            DOCSRS_PREFIX: /opt/docsrs/prefix
+            DOCSRS_DOCKER: true
+            DOCSRS_DOCKER_SKIP_INIT: true
+            DOCSRS_RUSTWIDE_WORKSPACE: /opt/docsrs/rustwide
+            DOCSRS_DATABASE_URL: postgresql://cratesfyi:password@db/gui-tests
+            DOCSRS_STORAGE_BACKEND: s3
+            DOCSRS_S3_BUCKET: "gui-tests"
+            S3_ENDPOINT: http://s3:9000
+            AWS_ACCESS_KEY_ID: cratesfyi
+            AWS_SECRET_ACCESS_KEY: secret_key
+        env_file:
+            - .env
+        healthcheck:
+            test: ["CMD", "curl", "--silent", "--fail", "localhost:3000"]
+            interval: 1s
+            timeout: 1s
+            retries: 10
+
+    gui-tests:
         build:
             context: .
             dockerfile: ./dockerfiles/Dockerfile-gui-tests
-        network_mode: "host"
-        extra_hosts:
-            - "host.docker.internal:host-gateway"
+        environment:
+          SERVER_URL: http://gui-tests-web:3000
         volumes:
             - "${PWD}:/build/out"
 

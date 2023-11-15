@@ -1,40 +1,40 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
-# Just in case it's running, we stop the web server.
-docker-compose stop web
+run() {
+  cmd="$1"
+  shift
+  printf '     \e[36;1mRunning\e[0m `%q' "$cmd" >&2
+  printf ' %q' "$@" >&2
+  printf '`\n' >&2
+  "$cmd" "$@"
+}
 
-docker-compose up -d db s3
+# Pre-build the images for the web server and test containers
+run docker compose build gui-tests-web gui-tests
 
-# If we have a .env file, we need to temporarily move it so
-# it doesn't make sqlx fail compilation.
-if [ -f .env ]; then
-  mv .env .tmp.env
-fi
+# Stop any leftover server from prior runs
+run docker compose stop gui-tests-web
 
-# We add the information we need.
-cargo run -- database migrate
-cargo run -- build update-toolchain
-cargo run -- build crate sysinfo 0.23.4
-cargo run -- build crate sysinfo 0.23.5
-cargo run -- build add-essential-files
+# Ensure the database and S3 are running
+run docker compose up --wait --wait-timeout 10 db s3
 
-if [ -f .tmp.env ]; then
-  mv .tmp.env .env
-fi
+# Wipe the database and S3 storage
+run docker compose exec db dropdb --user cratesfyi gui-tests
+run docker compose exec db createdb --user cratesfyi gui-tests
+run docker compose exec s3 rm -rf /data/gui-tests
+run docker compose exec s3 mkdir -p /data/gui-tests
 
-# In case we don't have a `.env`, we create one.
-if [ ! -f .env ]; then
-  cp .env.sample .env
-fi
+# Add the information we need
+run docker compose run --rm gui-tests-web database migrate
+run docker compose run --rm gui-tests-web build update-toolchain
+run docker compose run --rm gui-tests-web build crate sysinfo 0.23.4
+run docker compose run --rm gui-tests-web build crate sysinfo 0.23.5
 
-. .env
+# Start the web server up
+run docker compose up --wait --wait-timeout 10 gui-tests-web
+trap 'run docker compose stop gui-tests-web' EXIT
 
-cargo run -- start-web-server &
-SERVER_PID=$!
-
-# status="docker run . -v `pwd`:/build/out:ro gui_tests"
-docker-compose run gui_tests
-status=$?
-exit $status
+# Run the tests
+run docker compose run gui-tests
